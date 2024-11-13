@@ -85,6 +85,8 @@ class GFF:
                         self.contig_count += 1
                         current_contig = contig(line,self.contig_count)
                         self.contigs[str(current_contig)] = current_contig
+                        if current_contig.name != str(current_contig.number):
+                            self.contigs[current_contig.number] = current_contig
                     else:
                         self.file_info.append(line)
                 elif line.split('\t')[0] in self.contigs:
