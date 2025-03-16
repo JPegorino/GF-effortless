@@ -12,5 +12,5 @@ with open(gene_list_file,'r') as gene_list:
 
 with open(output_file_name,'w') as outfile:
     for id in ids:
-        sequence = gff_input.entry(id,stat='ID').printing_sequence(split_every=60)
+        sequence = gff_input.feature(id,stat='ID').printing_sequence(split_every=60)
         outfile.write(sequence + '\n')
