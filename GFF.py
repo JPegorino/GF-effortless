@@ -26,12 +26,15 @@ class contig:
     def concatenate_sequence(self,sequence_to_concatenate):
         self.sequence = self.sequence + sequence_to_concatenate
         
-    def print_sequence(self,split_every=None,region=False,rename=False):
+    def print_sequence(self,reverse_strand=False,split_every=None,region=False,rename=False):
         out_sequence = self.sequence if not region else self.sequence[region[0]-1:region[1]]
+        if reverse_strand:
+            out_sequence = out_sequence.lower().replace('a','0').replace('t','2').replace('c','1').replace('g','3')
+            out_sequence = out_sequence.replace('0','T').replace('2','A').replace('1','G').replace('3','C').upper()[::-1]
         out_name = rename if rename else self.name
         split_value = split_every if split_every else len(self.sequence)
         print_info='>{}'.format(out_name)
-        print_info = [print_info] + [out_sequence[pos:pos+split_value] for pos in range(0, int(self.length), split_value)] 
+        print_info = [print_info] + [out_sequence[pos:pos+split_value] for pos in range(0, int(len(out_sequence)), split_value)] 
         return '\n'.join(print_info)
         
     def write(self):
@@ -56,7 +59,7 @@ class GFF_feature:
         elif alt_ID_stat and alt_ID_stat in self.feature_info.keys():
             self.ID = self.feature_info[alt_ID_stat]
         else:
-            print('Warning: no {} stat or specified alternative for feature:\n{}\nGenerating ID from co-ordinates...'.format(ID_stat,entry))
+            print('\nWarning: no {} stat or specified alternative for feature:\n{}\nGenerating ID from co-ordinates...\n'.format(ID_stat,entry))
             self.ID = self.coords
         self.records = self.feature_info.keys()
         
@@ -119,7 +122,7 @@ class GFF_feature:
 
 ### Main GFF file object class
 class GFF:
-    def __init__(self, file, ID_stat='ID', update_entry_stats=False, alt_ID_stat=None):
+    def __init__(self, file, ID_stat='ID', update_feature_stats=False, alt_ID_stat=None):
         self.file = file
         self.name = self.file.split('/')[-1].split('.gff')[0]
         self.file_info = []
@@ -221,11 +224,6 @@ class GFF:
     def feature(self,feature_lookup,stat=None):
         if feature_lookup in self.features:
             out_feature = self.features.get(feature_lookup)
-        else:
-            assert stat in self.all_recorded_stats, 'file contains no information for "{}"'.format(feature_lookup)
-            for feature in self.features.values():
-                feature.feature_record_by_stat(stat=stat,dictionary=self.features_per_stat)
-            out_feature = self.features.get(self.features_per_stat.get(feature_lookup))
         return out_feature
 
     def fetch_feature_sequences(self,list_of_loci,list_of_fasta_header_categories,split_every=None):
