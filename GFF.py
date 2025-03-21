@@ -26,11 +26,11 @@ class contig:
     def concatenate_sequence(self,sequence_to_concatenate):
         self.sequence = self.sequence + sequence_to_concatenate
         
-    def print_sequence(self,split_every=None):
+    def print_sequence(self,split_every=None,region=False):
+        out_sequence = self.sequence if not region else self.sequence[region[0]-1:region[1]]
         split_value = split_every if split_every else len(self.sequence)
-        split_value = split_value
         print_info='>{}'.format(self.name)
-        print_info = [print_info] + [self.sequence[pos:pos+split_value] for pos in range(0, int(self.length), split_value)] 
+        print_info = [print_info] + [out_sequence[pos:pos+split_value] for pos in range(0, int(self.length), split_value)] 
         return '\n'.join(print_info)
         
     def write(self):
