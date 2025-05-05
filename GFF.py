@@ -58,13 +58,18 @@ class GFF_feature:
         elif alt_ID_stat and alt_ID_stat in self.feature_info.keys():
             self.ID = self.feature_info[alt_ID_stat]
         else:
-            print('\nWarning: no {} stat or specified alternative for feature:\n{}\nGenerating ID from co-ordinates...\n'.format(ID_stat,entry))
+            print('\nWarning: no {} stat or specified alternative for feature:\n{}\nGenerating ID from co-ordinates...'.format(ID_stat,entry))
             self.ID = self.coords
+        self.Parent = self.feature_info.get('Parent') if 'Parent' in self.feature_info else self.ID
+        self.family = self.Parent
         self.records = self.feature_info.keys()
         
     def __repr__(self):
         return self.ID
     
+    def add_family(self,heirarchy):
+        self.family = heirarchy
+        
     def lookup(self,stat):
         if stat in self.feature_info:
             return self.feature_info[stat]
