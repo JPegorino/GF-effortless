@@ -6,7 +6,7 @@ class contig:
     def __init__(self, entry, number):
         self.contig = entry
         self.name = entry.split(' ')[1]
-        self.length = entry.split(' ')[3]
+        self.length = int(entry.split(' ')[3])
         self.sequence = ''
         self.number = number
         
@@ -100,8 +100,9 @@ class GFF_feature:
             parse_sequence = parse_sequence.replace('0','T').replace('2','A').replace('1','G').replace('3','C').upper()[::-1]
         self.sequence.append(parse_sequence)
         if measure_stats:
-            self.sequence_length = len(self.sequence)
-            self.GC = 100*len(self.sequence.replace('T','').replace('A',''))/self.sequence_length
+            measure_sequence = ''.join(self.sequence[0]) ### [0] see below
+            self.sequence_length = len(measure_sequence)
+            self.GC = 100*len(measure_sequence.replace('T','').replace('A',''))/self.sequence_length
             self.contig_boundary_dist = min(min(0,min(self.start,self.stop)),feature_contig.length-max(self.start,self.stop))
         
     def print_sequence(self,fasta_name_stats='ID',split_every=None):
@@ -201,7 +202,7 @@ class GFF:
                     all_coords.append(feature.coords)
                     locus_index += 1
                 more_info_to_add = {'index': locus_index,
-                                    'family': feature.family.get(feature_ID),
+                                    'family': self.family.get(feature_ID),
                                     'sequence_length': feature.sequence_length,
                                     'contig_sequence_length': self.contigs[feature.contig_name].length,
                                     'contig_boundary_distance': feature.contig_boundary_dist,
@@ -267,12 +268,12 @@ class GFF:
             current_feature.rename_contig(new_contig_name)            
 
     def to_newfile(self,out_file=False,
-    number_contigs=True,rename_contigs=True,update_stats=True,
+    rename_contigs=True,update_stats=True,
                    add_FASTA_sequence=True,FASTA_Split_Every=True,
                    skip_entries=[],skip_contigs=[]):
         out_file = out_file if out_file else self.file + '.out'
-        if rename_contigs or number_contigs:
-            self.rename_contigs(number_contigs,rename_contigs)
+        if rename_contigs: # the default value (of simply 'True') will number the contigs and name them after the genome
+            self.rename_contigs(rename_contigs=rename_contigs) # this can be set to false or 'add_number' to simply add the number
         with open(out_file,'w') as outfile:
             outfile.write(self.info(as_input=True))
             outfile.write('\n')
