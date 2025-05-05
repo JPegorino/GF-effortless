@@ -66,20 +66,26 @@ class GFF_feature:
         
     def __repr__(self):
         return self.ID
-    
+
     def add_family(self,heirarchy):
         self.family = heirarchy
-        
+
     def lookup(self,stat):
         if stat in self.feature_info:
             return self.feature_info[stat]
+        elif stat in self.family.all_feature_info:
+            output = self.family.all_feature_info[stat]
+            if len(output.split(';'))>1:
+                return {feature_ID:feature.feature_info.get(stat) for feature_ID,feature in self.family.unique_features.items()}
+            else:
+                return output
+        elif stat in self.family.attributes:
+            return self.family.attributes[stat]
         else:
-            matches = []
-            for stat,value in self.feature_info.items():
-                if value == stat:
-                    matches.append(stat)
-            return matches if len(matches) > 1 else matches[0]
-    
+            pattern = re.compile(r"{}".format(stat))
+            matching_attributes = [attribute for attribute in self.family.attributes.keys() if pattern.match(attribute)]
+            return matching_attributes #if len(matching_attributes) > 0 else 'NA'
+
     def update(self,stats_to_add,retain_old='raw_',overwrite=False):
         assert type(stats_to_add) == dict, 'stats must be provided as a dictionary'
         for stat in stats_to_add.keys():
@@ -89,13 +95,13 @@ class GFF_feature:
                     assert stat not in self.feature_info, '{}: cannot have duplicate attributes per feature'.format(stat)                    
             self.feature_info[stat] = stats_to_add.get(stat)
         self.records = self.feature_info.keys()
-    
+
     def rename_contig(self,new_contig_name):
         assert type(new_contig_name) == str, 'contig names must be strings.'
         self.raw_entry = self.raw_entry.replace(self.contig_name,new_contig_name)
         self.feature = self.raw_entry.split('\t')
         self.contig_name = new_contig_name
-            
+
     def add_sequence(self,feature_contig,measure_stats=False):
         assert type(feature_contig) == contig and len(feature_contig.sequence) > 0, '{} contig sequence not parsed'.format(feature_contig)
         parse_sequence = feature_contig.sequence[self.start+self.frame-1:self.stop+self.frame].upper()
@@ -171,6 +177,7 @@ class GFF_feature_heirarchy:
         # finally, iterate through the extracted stats/attributes one last time to remove duplication
         self.all_feature_info = { stat: '; '.join(sorted(set(attributes.values()))) for stat,attributes in self.all_feature_info.items()}
         self.attributes = {att: ', '.join(sorted(set(stat.split(',')))) for att,stat in self.attributes.items()}        
+
 ### Main GFF file object class
 class GFF:
     def __init__(self, file, ID_stat='ID', update_feature_stats=False, alt_ID_stat=None):
@@ -180,8 +187,9 @@ class GFF:
         self.contigs = {}
         self.contig_count = len(self.contigs)
         self.contig_sequence = []
-        self.features = {}
-        self.family = {} # a dictionary to store Parent/child links   
+        self.features = {} # a dictionary for all features (separate parents and children)
+        self.progenitors = {} # a dictionary for parents only to match with children 
+        self.children = {} # a dictionary for children only  
 
         with open(self.file,'r') as infile:
             all_recorded_stats = [] # a list to record each unique combination of recorded stats per gff file 
@@ -204,19 +212,13 @@ class GFF:
                         all_recorded_stats.append(list(current_feature.records))
                     # add new stats from current feature to dictionary
                     if current_feature.ID in self.features:
-                        print('Warning: {} file contains multiple entries for {}, keeping first.'.format(self.file,current_feature))
+                        print('Warning: {} file contains multiple entries with ID {}, keeping first.'.format(self.file,current_feature))
                     else:
                         self.features[current_feature.ID] = current_feature
                         if 'Parent' in current_feature.records:
-                            parent_child = [current_feature.lookup('Parent'),current_feature.ID]
-                            for x,y in [parent_child,parent_child[::-1]]:
-                                if x in self.family.keys():
-                                    if type(self.family.get(x)) == list:
-                                        self.family[x] = self.family.get(x) + [y]
-                                    else:
-                                        self.family[x] = [self.family.get(x) ,y]
-                                else:
-                                    self.family[x] = y
+                            self.children[current_feature.ID] = current_feature.Parent
+                        else:
+                            self.progenitors[current_feature.ID] = [current_feature] # enter data as list
                     # add sequence data from the end of the file, if it is there
                 elif line.startswith('>'):
                     if len(self.contig_sequence) > 0: # if the sequence of a previous contig is not currently parsed and stored 
@@ -233,8 +235,18 @@ class GFF:
                 else:
                     self.contig_sequence.append(line)
             current_contig.concatenate_sequence(''.join(self.contig_sequence)) # store the parsed data for the final contig
+        
         # summary info
         self.all_recorded_stats = set(sum(all_recorded_stats, []))
+
+        # update offspring list in progenitor dictionary now that all entries have been parsed
+        for child_ID,parent_ID in self.children.items(): # add family info for children
+            self.progenitors.get(parent_ID).append(self.features.get(child_ID))
+        for progenitor,relatives in self.progenitors.items():
+            family_info = GFF_feature_heirarchy(relatives)
+            self.progenitors[progenitor] = family_info
+            for relative in relatives:
+                relative.family = family_info
 
         # update info (optional?)
         # if contig fasta sequences were provided, add sequences to entries for each locus
@@ -243,16 +255,14 @@ class GFF:
                 current_feature = self.features[feature]
                 current_contig = self.contigs[current_feature.contig_name]
                 current_feature.add_sequence(current_contig, measure_stats=update_feature_stats)
-         # and finally, iterate back through the entries to add any holistic stats:
+        # and finally, iterate back through the entries to add any holistic stats:
         if update_feature_stats:
-            all_coords = []
             locus_index = 0
             for feature_ID,feature in self.features.items():
-                if feature.coords not in all_coords:
-                    all_coords.append(feature.coords)
+                if feature.Parent == feature:
                     locus_index += 1
                 more_info_to_add = {'index': locus_index,
-                                    'family': self.family.get(feature_ID),
+                                    'progenitor_ID': feature.family.progenitor,
                                     'sequence_length': feature.sequence_length,
                                     'contig_sequence_length': self.contigs[feature.contig_name].length,
                                     'contig_boundary_distance': feature.contig_boundary_dist,
@@ -261,7 +271,8 @@ class GFF:
                 if feature_ID == feature.coords:
                     more_info_to_add[ID_stat] = feature.coords
                 self.features[feature_ID].update(more_info_to_add)
-             
+        # including making a record of the data for all the relatives of each top parent
+
     def __repr__(self):
         return str(self.name) + '.gff'
     
@@ -272,9 +283,25 @@ class GFF:
     def fetch_feature_list(self):
         return [feature.ID for feature in self.features.values()]
     
-    def feature(self,feature_lookup,stat=None):
+    def search(self,search_term):
+        if search_term in self.features:
+            return self.features.get(search_term).coords
+        else:
+            to_print = []
+            for ID,feature in self.progenitors.items():
+                for branch in feature.family:
+                    if branch.lookup(search_term):
+                        to_print.append(branch)
+            return(to_print)           
+
+    def feature(self,feature_lookup,ftype=None):
         if feature_lookup in self.features:
             out_feature = self.features.get(feature_lookup)
+            if ftype in out_feature.family.unique_features.keys():
+                replace_feature = feature_lookup.family.unique_features.get(feature_lookup)
+                out_feature = features.get(replace_feature)
+        else:
+            out_feature = feature_lookup.family.unique_features()
         return out_feature
 
     def fetch_feature_sequences(self,list_of_loci,list_of_fasta_header_categories,split_every=None):
