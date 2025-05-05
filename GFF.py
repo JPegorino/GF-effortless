@@ -113,7 +113,7 @@ class GFF_feature:
             measure_sequence = ''.join(self.sequence[0]) ### [0] see below
             self.sequence_length = len(measure_sequence)
             self.GC = 100*len(measure_sequence.replace('T','').replace('A',''))/self.sequence_length
-            self.contig_boundary_dist = min(min(0,min(self.start,self.stop)),feature_contig.length-max(self.start,self.stop))
+            self.contig_boundary_dist = min(min(self.start,self.stop),feature_contig.length-max(self.start,self.stop))
         
     def print_sequence(self,fasta_name_stats='ID',split_every=None):
         if type(fasta_name_stats) == str:
