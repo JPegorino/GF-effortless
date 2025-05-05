@@ -41,7 +41,6 @@ class contig:
         return self.contig + '\n'
 
 ### GFF feature object class
-
 class GFF_feature:
     def __init__(self, entry, contig_number, ID_stat='ID', alt_ID_stat=False):
         self.raw_entry = entry
@@ -121,6 +120,52 @@ class GFF_feature:
         else:
             return self.raw_entry
 
+### GFF feature heirarchy class
+class GFF_feature_heirarchy:
+    def __init__(self, progenitor):
+        self.progenitor = progenitor
+        self.count = len(self.progenitor)
+        self.all_feature_info = {}
+        self.attributes = {}
+        self.feature_tally = {}
+        self.unique_features = {}
+        # create featute type tally
+        for feature in self.progenitor:
+            if feature.seq_type in self.feature_tally:
+                self.feature_tally[feature.seq_type] += 1
+            else:
+                self.feature_tally[feature.seq_type] = 1
+        # split between duplicated and unique feature types per progenitor
+        duplicates = []
+        for feature in self.progenitor:
+            if self.feature_tally.get(feature.seq_type) < 2:
+                self.unique_features[feature.seq_type] = feature
+            else:
+                duplicates.append((feature.ID,feature.seq_type))
+        # for the duplicated feature types, add a number to the dictionary lookup
+        duplicated_feature_types = [ft for ft in self.feature_tally if self.feature_tally[ft] > 1]
+        for ft in duplicated_feature_types:
+            duplicated_feature_count = 0
+            for ID,feature_type in duplicated_features:
+                if feature_type == ft:
+                    duplicated_feature_count += 1
+                    seq_type_numbered = feature_type + '_{}'.format(str(duplicated_feature_count))
+                    self.unique_features[seq_type_numbered] = feature
+        # next, iterate through and extract the different feature stats/attributes
+        for feature_ID,feature in self.unique_features.items():
+            for stat,attribute in feature.feature_info.items():
+                if stat not in ['Parent','ID']:
+                    if stat in self.all_feature_info:
+                        self.all_feature_info.get(stat)[feature_ID]=attribute
+                    else:
+                        self.all_feature_info[stat] = {feature_ID:attribute}
+                    if attribute in self.attributes:
+                        self.attributes[attribute] = self.attributes.get(attribute) + ',{}'.format(feature_ID)
+                    else:
+                        self.attributes[attribute] = feature_ID
+        # finally, iterate through the extracted stats/attributes one last time to remove duplication
+        self.all_feature_info = { stat: '; '.join(sorted(set(attributes.values()))) for stat,attributes in self.all_feature_info.items()}
+        self.attributes = {att: ', '.join(sorted(set(stat.split(',')))) for att,stat in self.attributes.items()}        
 ### Main GFF file object class
 class GFF:
     def __init__(self, file, ID_stat='ID', update_feature_stats=False, alt_ID_stat=None):
