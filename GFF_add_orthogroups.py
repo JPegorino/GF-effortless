@@ -56,7 +56,7 @@ for gff_id,file in genome_list.items():
             input_gff.features.get(feature).update(stats_to_add=stats)
             feature_count +=1
         except:
-            for split_feature in feature.split(';'):
+            for split_feature in feature.replace(':',';').split(';'):
                 try:
                     input_gff.features.get(drop_special_chars(split_feature)).update(stats_to_add=stats)
                     feature_count +=1
