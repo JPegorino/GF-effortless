@@ -1,5 +1,6 @@
+### DEPENDENCIES ###
+import re
 ### CLASS DEFINITIONS ###
-### SUPPLEMENTARY OBJECT CLASSES
 
 ### GFF contig object class
 class contig:
@@ -60,6 +61,7 @@ class GFF_feature:
         else:
             print('\nWarning: no {} stat or specified alternative for feature:\n{}\nGenerating ID from co-ordinates...'.format(ID_stat,entry))
             self.ID = self.coords
+        self.idx = 0
         self.Parent = self.feature_info.get('Parent') if 'Parent' in self.feature_info else self.ID
         self.family = self.Parent
         self.records = self.feature_info.keys()
@@ -187,9 +189,13 @@ class GFF:
         self.contigs = {}
         self.contig_count = len(self.contigs)
         self.contig_sequence = []
+        self.feature_count = 1
         self.features = {} # a dictionary for all features (separate parents and children)
         self.progenitors = {} # a dictionary for parents only to match with children 
         self.children = {} # a dictionary for children only  
+        self.renamed_progenitors = {} # a dictionary for matching up old and new names for progenitors, if identified in the data
+        self.indexed_features = {} # a dictionary for heirarchies (families) by index
+        # take carer!: in order for the indexed_features dictionary to be filled correctly, features must be numbered and appear in numbered order             
 
         with open(self.file,'r') as infile:
             all_recorded_stats = [] # a list to record each unique combination of recorded stats per gff file 
@@ -210,6 +216,11 @@ class GFF:
                     # record the stats provided for each feature to generate a list of total available stats
                     if list(current_feature.records) not in all_recorded_stats:
                         all_recorded_stats.append(list(current_feature.records))
+                    # update current feature index - this will only work if the features are in order                   
+                    if re.search(fr"_0*{str(self.feature_count)}\b", current_feature.ID):
+                        current_feature.idx = self.feature_count
+                    elif re.search(fr"_0*{str(self.feature_count-1)}\b", current_feature.ID):
+                        current_feature.idx = self.feature_count - 1
                     # add new stats from current feature to dictionary
                     if current_feature.ID in self.features:
                         print('Warning: {} file contains multiple entries with ID {}, keeping first.'.format(self.file,current_feature))
@@ -219,6 +230,12 @@ class GFF:
                             self.children[current_feature.ID] = current_feature.Parent
                         else:
                             self.progenitors[current_feature.ID] = [current_feature] # enter data as list
+                            self.indexed_features[current_feature.idx] = current_feature.ID
+                            # some prokaryote pangenome tools rename GFF features by ID, so this should be handled here
+                            if 'prev_ID' in current_feature.records: # 'prev_ID' to record the old ID in PIRATE 'modified_gffs'
+                                self.renamed_progenitors[current_feature.lookup('prev_ID')] = current_feature.ID
+                            # if the file is in order, progenitors should be just before/after children, so this is the best place to increment the feature count 
+                            self.feature_count +=1
                     # add sequence data from the end of the file, if it is there
                 elif line.startswith('>'):
                     if len(self.contig_sequence) > 0: # if the sequence of a previous contig is not currently parsed and stored 
@@ -241,7 +258,19 @@ class GFF:
 
         # update offspring list in progenitor dictionary now that all entries have been parsed
         for child_ID,parent_ID in self.children.items(): # add family info for children
-            self.progenitors.get(parent_ID).append(self.features.get(child_ID))
+            if self.progenitors.get(parent_ID): # this can fail if the feature has been renamed but the parent ID has been left the same
+                self.progenitors.get(parent_ID).append(self.features.get(child_ID))
+            elif self.renamed_progenitors.get(parent_ID): # if the progenitor ID has been renamed, this needs to be used to stop it from 
+                guess_parent_ID = self.renamed_progenitors.get(parent_ID)
+                self.progenitors.get(guess_parent_ID).append(self.features.get(child_ID))
+            else: # if it does still fail, it might still be possible to identify the parent from the index if the file is in order 
+                child_index = self.features.get(child_ID).idx
+                guess_parent_ID = self.indexed_features.get(child_index)
+                try:
+                    self.progenitors.get(guess_parent_ID).append(self.features.get(child_ID))
+                except:
+                    print('\nError! Parent ID {} not found in file and no Prev_ID or equivalent stat was determined\n'.format(parent_ID))
+                    print('Unclear file ordering... cannot guess parent ID\n'.format(guess_parent_ID))
         for progenitor,relatives in self.progenitors.items():
             family_info = GFF_feature_heirarchy(relatives)
             self.progenitors[progenitor] = family_info
