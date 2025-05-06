@@ -287,7 +287,7 @@ class GFF:
         # and finally, iterate back through the entries to add any holistic stats:
         if update_feature_stats:
             for feature_ID,feature in self.features.items():
-                if feature.Parent in == self.renamed_progenitors:
+                if feature.Parent in self.renamed_progenitors:
                     feature.Parent = self.renamed_progenitors.get(feature.Parent)
                 more_info_to_add = {'index': feature.idx,
                                     'all_relative_IDs': feature.family.progenitor,
