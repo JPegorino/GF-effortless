@@ -1,14 +1,29 @@
 #!/usr/bin/env python3
-import sys, os, io, re, pandas as pd, numpy as np
+import sys, os, io, re, argparse, pandas as pd, numpy as np
 sys.path.append('os.path(__file__)')
 import GFF # GFF parser
 
-data_table = sys.argv[1]
-gff_input_dir = sys.argv[2]
-try:
-    stat_name = str(sys.argv[3])
-except: 
-    stat_name = "COG" # assumes COG if no alternate stat name provided
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Add e.g. orthogroup statistics from a data table to genome GFFs.")
+    parser.add_argument("data_table", 
+        help="Path to the input data table (CSV or TSV).")
+    parser.add_argument("gff_input_dir", 
+        help="Directory containing GFF files.")
+    parser.add_argument("-s", "--stat_name",
+        type=str, default="COG",
+        help="Optional label to prefix stat columns. Default: 'COG'.")
+    parser.add_argument("-f", "--first_genome_column_index",
+        type=int, default=None,
+        help="Column number of first column to drop, (e.g. first genome column). Default: infer genome columns from gff files.")
+    return parser.parse_args()
+
+# collect user arguments
+args = parse_args()
+data_table = args.data_table
+gff_input_dir = args.gff_input_dir
+stat_name = args.stat_name
+first_genome_column_index = args.first_genome_column_index
 
 # define functions
 def drop_special_chars(string):
@@ -33,10 +48,13 @@ for file in os.listdir(gff_input_dir):
     if not os.path.isfile(file) or not str(file).endswith('gff'):
         print('{} was not detected as a gff file. Skipping...'.format(file))
         continue
-    pangenome_stats_to_add.remove(gff_id) # drop the genome from the list of stats to add
     genome_list[gff_id] = file # add the data for the gff to the dictionary
 
 # update out list of stats to add to include the stat_name identifier
+if first_genome_column_index: # if a column number corresponding to the first genome column was provided
+    pangenome_stats_to_add = pangenome_stats_to_add[0:first_genome_column_index] # use it to filter the table
+else: # otherwise, try to infer from the gff files in the directory (which is likely to include all of them)
+    pangenome_stats_to_add = [stat for stat in pangenome_stats_to_add if stat not in genome_list]
 pangenome_stats_to_add[0] = stat_name
 pangenome_stats_to_add[1:] = ['_'.join([stat_name,drop_special_chars(stat)]) for stat in pangenome_stats_to_add[1:]]
 old_columns = df.columns.to_list()[0:len(pangenome_stats_to_add)]
@@ -44,10 +62,10 @@ df.rename(columns=dict(zip(old_columns,pangenome_stats_to_add)),inplace=True)
 
 for gff_id,file in genome_list.items():
     input_gff = GFF.GFF(file,update_feature_stats=True)
-    df_id = df[df[gff_id].notna() & (df[gff_id] != "")] # filter out rows with accessory genes that are absent in each genome
     subset_columns = pangenome_stats_to_add
     subset_columns.append(gff_id)
-    df_id = df_id[subset_columns] # drop columns other than those with stats we want to add
+    df_id = df[subset_columns] # drop columns other than those with stats we want to add
+    df_id = df_id[df_id[gff_id].notna() & (df_id[gff_id] != "")] # filter out rows with accessory genes that are absent in each genome
     # gff_to_COG = df_id.set_index(gff_id)[df.columns[0]].to_dict() # for just the COG names
     nested_dict = df_id.set_index(gff_id).to_dict(orient="index") # for all the COG stats
     feature_count = 0
