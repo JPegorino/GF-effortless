@@ -286,12 +286,11 @@ class GFF:
                 current_feature.add_sequence(current_contig, measure_stats=update_feature_stats)
         # and finally, iterate back through the entries to add any holistic stats:
         if update_feature_stats:
-            locus_index = 0
             for feature_ID,feature in self.features.items():
-                if feature.Parent == feature:
-                    locus_index += 1
-                more_info_to_add = {'index': locus_index,
-                                    'progenitor_ID': feature.family.progenitor,
+                if feature.Parent in == self.renamed_progenitors:
+                    feature.Parent = self.renamed_progenitors.get(feature.Parent)
+                more_info_to_add = {'index': feature.idx,
+                                    'all_relative_IDs': feature.family.progenitor,
                                     'sequence_length': feature.sequence_length,
                                     'contig_sequence_length': self.contigs[feature.contig_name].length,
                                     'contig_boundary_distance': feature.contig_boundary_dist,
