@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import sys, os, io, re, pandas as pd, numpy as np
+import sys, os, io, re, argparse pandas as pd, numpy as np
 sys.path.append('os.path(__file__)')
 import GFF # GFF parser
 
@@ -31,7 +31,7 @@ stat_name = args.stat_name
 
 # parse data for user arguments and handle poor input values
 if stat_name:
-    assert stat_name in gff_input.all_recorded_stats, "Error: {} information is not recorded for gff features.".format(stat_name])
+    assert stat_name in gff_input.all_recorded_stats, "Error: {} information is not recorded for gff features.".format(stat_name)
 
 if filter:
     assert filter[0] in gff_input.all_recorded_stats, "{} information is not recorded for gff features.".format(filter[0])
