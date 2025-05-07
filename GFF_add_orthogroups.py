@@ -36,6 +36,7 @@ assert os.path.isdir(gff_input_dir), "requires an input directory with gff files
 assert os.path.isfile(data_table), "requires an input file with tabular data per CDS for each gff (columns)."
 delim = ',' if data_table.endswith('csv') else '\t'
 df = pd.read_csv(data_table, sep=delim)
+print(df.shape)
 
 # define important variables
 pangenome_stats_to_add = df.columns.to_list()
@@ -63,8 +64,8 @@ df.rename(columns=dict(zip(old_columns,pangenome_stats_to_add)),inplace=True)
 for gff_id,file in genome_list.items():
     input_gff = GFF.GFF(file,update_feature_stats=True)
     subset_columns = pangenome_stats_to_add
-    subset_columns.append(gff_id)
     df_id = df[subset_columns] # drop columns other than those with stats we want to add
+    subset_columns.remove(gff_id) # temporary solution(?) - so that it isn't cummulative
     df_id = df_id[df_id[gff_id].notna() & (df_id[gff_id] != "")] # filter out rows with accessory genes that are absent in each genome
     # gff_to_COG = df_id.set_index(gff_id)[df.columns[0]].to_dict() # for just the COG names
     nested_dict = df_id.set_index(gff_id).to_dict(orient="index") # for all the COG stats
