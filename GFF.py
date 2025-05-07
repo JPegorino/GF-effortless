@@ -135,22 +135,23 @@ class GFF_feature:
 
 ### GFF feature heirarchy class
 class GFF_feature_heirarchy:
-    def __init__(self, progenitor):
-        self.progenitor = progenitor
-        self.count = len(self.progenitor)
+    def __init__(self, feature_family):
+        self.feature_family = feature_family
+        self.progenitor = self.feature_family[0].ID
+        self.count = len(self.feature_family)
         self.all_feature_info = {}
         self.attributes = {}
         self.feature_tally = {}
         self.unique_features = {}
         # create featute type tally
-        for feature in self.progenitor:
+        for feature in self.feature_family:
             if feature.seq_type in self.feature_tally:
                 self.feature_tally[feature.seq_type] += 1
             else:
                 self.feature_tally[feature.seq_type] = 1
-        # split between duplicated and unique feature types per progenitor
+        # split between duplicated and unique feature types per feature_family
         duplicates = []
-        for feature in self.progenitor:
+        for feature in self.feature_family:
             if self.feature_tally.get(feature.seq_type) < 2:
                 self.unique_features[feature.seq_type] = feature
             else:
@@ -180,6 +181,9 @@ class GFF_feature_heirarchy:
         self.all_feature_info = { stat: '; '.join(sorted(set(attributes.values()))) for stat,attributes in self.all_feature_info.items()}
         self.attributes = {att: ', '.join(sorted(set(stat.split(',')))) for att,stat in self.attributes.items()}        
 
+    def __str__(self):
+        return self.progenitor # return just the progenitor ID if the heirarchy is printed as strting
+
 ### Main GFF file object class
 class GFF:
     def __init__(self, file, ID_stat='ID', update_feature_stats=False, alt_ID_stat=None):
@@ -191,9 +195,9 @@ class GFF:
         self.contig_sequence = []
         self.feature_count = 1
         self.features = {} # a dictionary for all features (separate parents and children)
-        self.progenitors = {} # a dictionary for parents only to match with children 
+        self.families = {} # a dictionary for parents only to match with children 
         self.children = {} # a dictionary for children only  
-        self.renamed_progenitors = {} # a dictionary for matching up old and new names for progenitors, if identified in the data
+        self.renamed_parents = {} # a dictionary for matching up old and new names for families, if identified in the data
         self.indexed_features = {} # a dictionary for heirarchies (families) by index
         # take carer!: in order for the indexed_features dictionary to be filled correctly, features must be numbered and appear in numbered order             
 
@@ -228,12 +232,12 @@ class GFF:
                         self.features[current_feature.ID] = current_feature
                         if 'Parent' in current_feature.records:
                             self.children[current_feature.ID] = current_feature.Parent
-                        else:
-                            self.progenitors[current_feature.ID] = [current_feature] # enter data as list
+                        else: # if there is no parent, we define this feature as a progenitor 
+                            self.families[current_feature.ID] = [current_feature] # enter data as list, starting with progenitor
                             self.indexed_features[current_feature.idx] = current_feature.ID
                             # some prokaryote pangenome tools rename GFF features by ID, so this should be handled here
                             if 'prev_ID' in current_feature.records: # 'prev_ID' to record the old ID in PIRATE 'modified_gffs'
-                                self.renamed_progenitors[current_feature.lookup('prev_ID')] = current_feature.ID
+                                self.renamed_parents[current_feature.lookup('prev_ID')] = current_feature.ID
                             # if the file is in order, progenitors should be just before/after children, so this is the best place to increment the feature count 
                             self.feature_count +=1
                     # add sequence data from the end of the file, if it is there
@@ -256,25 +260,25 @@ class GFF:
         # summary info
         self.all_recorded_stats = set(sum(all_recorded_stats, []))
 
-        # update offspring list in progenitor dictionary now that all entries have been parsed
+        # update offspring list in families dictionary now that all entries have been parsed
         for child_ID,parent_ID in self.children.items(): # add family info for children
-            if self.progenitors.get(parent_ID): # this can fail if the feature has been renamed but the parent ID has been left the same
-                self.progenitors.get(parent_ID).append(self.features.get(child_ID))
-            elif self.renamed_progenitors.get(parent_ID): # if the progenitor ID has been renamed, this needs to be used to stop it from 
-                guess_parent_ID = self.renamed_progenitors.get(parent_ID)
-                self.progenitors.get(guess_parent_ID).append(self.features.get(child_ID))
+            if self.families.get(parent_ID): # this can fail if the feature has been renamed but the parent ID has been left the same
+                self.families.get(parent_ID).append(self.features.get(child_ID))
+            elif self.renamed_parents.get(parent_ID): # if any parent ID has been renamed, this needs to be used to stop it from bugging
+                guess_parent_ID = self.renamed_parents.get(parent_ID)
+                self.families.get(guess_parent_ID).append(self.features.get(child_ID))
             else: # if it does still fail, it might still be possible to identify the parent from the index if the file is in order 
                 child_index = self.features.get(child_ID).idx
                 guess_parent_ID = self.indexed_features.get(child_index)
                 try:
-                    self.progenitors.get(guess_parent_ID).append(self.features.get(child_ID))
+                    self.families.get(guess_parent_ID).append(self.features.get(child_ID))
                 except:
                     print('\nError! Parent ID {} not found in file and no Prev_ID or equivalent stat was determined\n'.format(parent_ID))
                     print('Unclear file ordering... cannot guess parent ID\n'.format(guess_parent_ID))
-        for progenitor,relatives in self.progenitors.items():
-            family_info = GFF_feature_heirarchy(relatives)
-            self.progenitors[progenitor] = family_info
-            for relative in relatives:
+        for progenitor,offspring in self.families.items():
+            family_info = GFF_feature_heirarchy(offspring)
+            self.families[progenitor] = family_info
+            for relative in offspring:
                 relative.family = family_info
 
         # update info (optional?)
@@ -287,10 +291,10 @@ class GFF:
         # and finally, iterate back through the entries to add any holistic stats:
         if update_feature_stats:
             for feature_ID,feature in self.features.items():
-                if feature.Parent in self.renamed_progenitors:
-                    feature.Parent = self.renamed_progenitors.get(feature.Parent)
+                if feature.Parent in self.renamed_parents:
+                    feature.Parent = self.renamed_parents.get(feature.Parent)
                 more_info_to_add = {'index': feature.idx,
-                                    'all_relative_IDs': feature.family.progenitor,
+                                    'progenitor': feature.family.progenitor,
                                     'sequence_length': feature.sequence_length,
                                     'contig_sequence_length': self.contigs[feature.contig_name].length,
                                     'contig_boundary_distance': feature.contig_boundary_dist,
@@ -316,20 +320,22 @@ class GFF:
             return self.features.get(search_term).coords
         else:
             to_print = []
-            for ID,feature in self.progenitors.items():
+            for progenitor,offspring in self.families.items():
                 for branch in feature.family:
                     if branch.lookup(search_term):
                         to_print.append(branch)
-            return(to_print)           
+            return(to_print)            
 
-    def feature(self,feature_lookup,ftype=None):
+    def feature(self,feature_lookup,feature_type=None):
         if feature_lookup in self.features:
             out_feature = self.features.get(feature_lookup)
-            if ftype in out_feature.family.unique_features.keys():
-                replace_feature = feature_lookup.family.unique_features.get(feature_lookup)
-                out_feature = features.get(replace_feature)
+             # the code below allows retreival of data for an alternate feature type in the same family (e.g. CDS info for a gene) if there is only one
+            if feature_type in out_feature.family.unique_features.keys(): # this only works for 1:1 rep=lationships, e.g. one CDS per gene
+                out_feature = out_feature.family.unique_features.get(feature_type)
+            elif feature_type:
+                print('Warining: no unique {} feature in {} feature heirarchy'.format(feature_type,feature_lookup))
         else:
-            out_feature = feature_lookup.family.unique_features()
+            out_feature = feature_lookup.family.unique_features() # I think this will currently fail - need to check this if/else construct
         return out_feature
 
     def fetch_feature_sequences(self,list_of_loci,list_of_fasta_header_categories,split_every=None):
