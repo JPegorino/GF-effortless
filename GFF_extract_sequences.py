@@ -78,6 +78,10 @@ if filtering:
                 filtered_features.append(feature)
     selected_features = filtered_features
 
+if len(selected_features) == 0:
+    print('no matching {} features for {}- after filtering nothing to write to file. Exiting...'.format(stat_name,lookup))
+    sys.exit(0)
+
 # extract nucleotide sequences
 with open(output_file_name,'w') as outfile:
     for feature in selected_features:
