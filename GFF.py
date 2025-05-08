@@ -51,9 +51,12 @@ class GFF_feature:
         self.frame = int(self.feature[7]) if self.feature[7] in list('012') else 0
         self.start = int(self.feature[3]) ; self.stop = int(self.feature[4])
         self.contig_number = contig_number
-        self.coords = '{};{};{}'.format(self.contig_number,self.start,self.stop) 
+        self.coords = '{}~{}~{}'.format(self.contig_number,self.start,self.stop) 
         self.sequence = []
-        self.feature_info = {stat.split('=')[0]:stat.split('=')[1] for stat in self.feature[len(self.feature)-1].split(';')}
+        try:
+            self.feature_info = {stat.split('=')[0]:stat.split('=')[1] for stat in self.feature[len(self.feature)-1].split(';')}
+        except:
+            print('there was an error in '+ self.raw_entry)
         if ID_stat in self.feature_info.keys():
             self.ID = self.feature_info[ID_stat]
         elif alt_ID_stat and alt_ID_stat in self.feature_info.keys():
