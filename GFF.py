@@ -53,10 +53,7 @@ class GFF_feature:
         self.contig_number = contig_number
         self.coords = '{}~{}~{}'.format(self.contig_number,self.start,self.stop) 
         self.sequence = []
-        try:
-            self.feature_info = {stat.split('=')[0]:stat.split('=')[1] for stat in self.feature[len(self.feature)-1].split(';')}
-        except:
-            print('there was an error in '+ self.raw_entry)
+        self.feature_info = {stat.split('=')[0]:stat.split('=')[1] for stat in self.feature[len(self.feature)-1].split(';')}
         if ID_stat in self.feature_info.keys():
             self.ID = self.feature_info[ID_stat]
         elif alt_ID_stat and alt_ID_stat in self.feature_info.keys():
