@@ -72,7 +72,7 @@ class GFF_feature:
     def add_family(self,heirarchy):
         self.family = heirarchy
 
-    def lookup(self,stat):
+    def lookup(self,stat, regex=True):
         if stat in self.feature_info:
             return self.feature_info[stat]
         elif stat in self.family.all_feature_info:
@@ -83,10 +83,12 @@ class GFF_feature:
                 return output
         elif stat in self.family.attributes:
             return self.family.attributes[stat]
-        else:
+        elif regex:
             pattern = re.compile(r"{}".format(stat))
-            matching_attributes = [attribute for attribute in self.family.attributes.keys() if pattern.match(attribute)]
+            matching_attributes = [attribute for attribute in self.family.attributes.keys() if pattern.search(attribute)]
             return matching_attributes #if len(matching_attributes) > 0 else 'NA'
+        else:
+            return None
 
     def update(self,stats_to_add,retain_old='raw_',overwrite=False):
         assert type(stats_to_add) == dict, 'stats must be provided as a dictionary'
@@ -182,7 +184,7 @@ class GFF_feature_heirarchy:
         self.attributes = {att: ', '.join(sorted(set(stat.split(',')))) for att,stat in self.attributes.items()}        
 
     def __str__(self):
-        return self.progenitor # return just the progenitor ID if the heirarchy is printed as strting
+        return self.progenitor # return just the progenitor ID if the heirarchy is printed as string
 
 ### Main GFF file object class
 class GFF:
@@ -194,12 +196,12 @@ class GFF:
         self.contig_count = len(self.contigs)
         self.contig_sequence = []
         self.feature_count = 1
-        self.features = {} # a dictionary for all features (separate parents and children)
+        self.features = {} # a dictionary for all features (separate parents and children) to match feature objects
         self.families = {} # a dictionary for parents only to match with children 
         self.children = {} # a dictionary for children only  
         self.renamed_parents = {} # a dictionary for matching up old and new names for families, if identified in the data
         self.indexed_features = {} # a dictionary for heirarchies (families) by index
-        # take carer!: in order for the indexed_features dictionary to be filled correctly, features must be numbered and appear in numbered order             
+        # take care!: in order for the indexed_features dictionary to be filled correctly, features must be numbered and appear in numbered order             
 
         with open(self.file,'r') as infile:
             all_recorded_stats = [] # a list to record each unique combination of recorded stats per gff file 
@@ -315,18 +317,7 @@ class GFF:
     def fetch_feature_list(self):
         return [feature.ID for feature in self.features.values()]
     
-    def search(self,search_term):
-        if search_term in self.features:
-            return self.features.get(search_term).coords
-        else:
-            to_print = []
-            for progenitor,offspring in self.families.items():
-                for branch in feature.family:
-                    if branch.lookup(search_term):
-                        to_print.append(branch)
-            return(to_print)            
-
-    def feature(self,feature_lookup,feature_type=None):
+    def feature(self,feature_lookup,feature_type=None,strictly_first=True,regex=False):
         if feature_lookup in self.features:
             out_feature = self.features.get(feature_lookup)
              # the code below allows retreival of data for an alternate feature type in the same family (e.g. CDS info for a gene) if there is only one
@@ -335,7 +326,21 @@ class GFF:
             elif feature_type:
                 print('Warining: no unique {} feature in {} feature heirarchy'.format(feature_type,feature_lookup))
         else:
-            out_feature = feature_lookup.family.unique_features() # I think this will currently fail - need to check this if/else construct
+             # the code below will attempt retrieval of one or more features with data that matches the lookup, if it is not an ID
+            families_with_match = []
+            for feature_family in self.families.values():
+                progenitor_feature = self.features.get(feature_family.progenitor)
+                if progenitor_feature.lookup(feature_lookup,regex=regex):
+                    families_with_match.append(progenitor_feature)
+            if len(families_with_match) < 1:
+                out_feature = None
+            elif strictly_first or len(families_with_match) == 1:
+                out_feature = families_with_match[0]
+                if len(families_with_match) > 1:
+                    print('Warining: {} feature families with data to match {}, returning first'.format(len(families_with_match),feature_lookup))
+                out_feature = families_with_match
+            else:
+                out_feature = families_with_match
         return out_feature
 
     def fetch_feature_sequences(self,list_of_loci,list_of_fasta_header_categories,split_every=None):
