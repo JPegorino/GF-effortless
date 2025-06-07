@@ -2,7 +2,7 @@ import sys, os, io, re, warnings
 sys.path.append('os.path(__file__)')
 import GFF # GFF parser
 
-gff = GFF.GFF(sys.argv[1].rstrip('/'))
+gff = GFF.GFF(sys.argv[1].rstrip('/'),update_feature_stats=True)
 out_feature = gff.feature(sys.argv[2])
 if not out_feature:
     out_feature = gff.feature(sys.argv[2],strictly_first=False,regex=True)
@@ -16,5 +16,6 @@ if type(out_feature) != list:
 for my_out in out_feature:
     print(my_out.ID)
     print(my_out.coords)
+    print(my_out.write(bed=True))
     print(my_out.feature_info)
-    print(my_out.print_sequence())
+    print(my_out.print_sequence(gff.contigs.get(my_out.contig_name),us=0,ds=0))

@@ -52,7 +52,6 @@ class GFF_feature:
         self.start = int(self.feature[3]) ; self.stop = int(self.feature[4])
         self.contig_number = contig_number
         self.coords = '{}~{}~{}'.format(self.contig_number,self.start,self.stop) 
-        self.sequence = []
         self.feature_info = {stat.split('=')[0]:stat.split('=')[1] for stat in self.feature[len(self.feature)-1].split(';')}
         if ID_stat in self.feature_info.keys():
             self.ID = self.feature_info[ID_stat]
@@ -72,7 +71,7 @@ class GFF_feature:
     def add_family(self,heirarchy):
         self.family = heirarchy
 
-    def lookup(self,stat, regex=True):
+    def lookup(self,stat,regex=True):
         if stat in self.feature_info:
             return self.feature_info[stat]
         elif stat in self.family.all_feature_info:
@@ -106,40 +105,56 @@ class GFF_feature:
         self.feature = self.raw_entry.split('\t')
         self.contig_name = new_contig_name
 
-    def add_sequence(self,feature_contig,measure_stats=False):
+    def sequence(self,feature_contig,us=0,ds=0):
         assert type(feature_contig) == contig and len(feature_contig.sequence) > 0, '{} contig sequence not parsed'.format(feature_contig)
-        parse_sequence = feature_contig.sequence[self.start+self.frame-1:self.stop+self.frame].upper()
+        assert type(us) == int and type(ds) == int, 'upstream and downstream values must be numeric integers'
+        if self.strand == '-':
+            us,ds = ds,us # swap upstream and downstream values if the sequnce is on the - strand
+        parse_sequence = feature_contig.sequence[self.start+self.frame-1-us:self.stop+self.frame+ds].upper()
         if self.strand == '-':
             parse_sequence = parse_sequence.lower().replace('a','0').replace('t','2').replace('c','1').replace('g','3')
             parse_sequence = parse_sequence.replace('0','T').replace('2','A').replace('1','G').replace('3','C').upper()[::-1]
-        self.sequence.append(parse_sequence)
-        if measure_stats:
-            measure_sequence = ''.join(self.sequence[0]) ### [0] see below
-            self.sequence_length = len(measure_sequence)
-            self.GC = 100*len(measure_sequence.replace('T','').replace('A',''))/self.sequence_length
-            self.contig_boundary_dist = min(min(self.start,self.stop),feature_contig.length-max(self.start,self.stop))
+        return parse_sequence
         
-    def print_sequence(self,fasta_name_stats='ID',split_every=None):
+    def print_sequence(self,feature_contig,fasta_name_stats='ID',split_every=None,us=0,ds=0):
+        assert type(feature_contig) == contig and len(feature_contig.sequence) > 0, '{} contig sequence not parsed'.format(feature_contig)
         if type(fasta_name_stats) == str:
             fasta_name_stats = [fasta_name_stats]
         print_info = ['>{}'.format('_'.join([self.feature_info.get(stat) for stat in fasta_name_stats if stat in self.feature_info]))]
-        out_sequence = ''.join(self.sequence[0]) ### added 24/02/2023 the [0] to avoid duplicated gene sequences per fasta feature
+        parse_sequence = self.sequence(feature_contig,us,ds) ### troubleshooting.
+        out_sequence = ''.join(parse_sequence) 
         split_value = split_every if split_every else len(out_sequence)
         print_info = print_info + [out_sequence[pos:pos+split_value] for pos in range(0, len(out_sequence), split_value)] 
         return '\n'.join(print_info)
 
-    def write(self,update=True):
-        if update:
+    def write(self,bed=False,raw=False,bed_score='NA_default',bed_color='NA_default'):
+        if raw:
+            return self.raw_entry
+        elif bed:
+            if type(self.family) == GFF_feature_heirarchy:
+                progenitor = self.family.progenitor_feature
+                feature_start = str(progenitor.start-1)
+                feature_end = str(progenitor.stop)
+            else:
+                feature_start = str(self.start-1)
+                feature_end = str(self.stop)
+            score_value = self.lookup(bed_score,regex=False)
+            score = score_value if type(score_value) in [int,float] else self.idx
+            color_value = self.lookup(bed_color,regex=False)
+            RGB_format = re.compile('(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2}),(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2}),(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})')
+            color = color_value if type(color_value) == 'str' and RGB_format.match(color_value) else '0,0,0'
+            bed_list = [self.contig_name,feature_start,feature_end,self.ID,self.strand,str(score),str(self.start-1),str(self.stop),color]
+            return '\t'.join(bed_list)
+        else:
             entry_data_string = ';'.join([str(k) + '=' + str(v) for k,v in self.feature_info.items()])
             return '\t'.join(['\t'.join(self.feature[0:8]), entry_data_string]) + '\n'
-        else:
-            return self.raw_entry
 
 ### GFF feature heirarchy class
 class GFF_feature_heirarchy:
     def __init__(self, feature_family):
         self.feature_family = feature_family
         self.progenitor = self.feature_family[0].ID
+        self.progenitor_feature = self.feature_family[0]
         self.count = len(self.feature_family)
         self.all_feature_info = {}
         self.attributes = {}
@@ -269,7 +284,7 @@ class GFF:
             elif self.renamed_parents.get(parent_ID): # if any parent ID has been renamed, this needs to be used to stop it from bugging
                 guess_parent_ID = self.renamed_parents.get(parent_ID)
                 self.families.get(guess_parent_ID).append(self.features.get(child_ID))
-            else: # if it does still fail, it might still be possible to identify the parent from the index if the file is in order 
+            else: # if it does still fail, it might be possible to identify the parent from the index if the file is in order 
                 child_index = self.features.get(child_ID).idx
                 guess_parent_ID = self.indexed_features.get(child_index)
                 try:
@@ -283,29 +298,28 @@ class GFF:
             for relative in offspring:
                 relative.family = family_info
 
-        # update info (optional?)
-        # if contig fasta sequences were provided, add sequences to entries for each locus
-        if len(self.contig_sequence) > 0:
-            for feature in self.features.keys():
-                current_feature = self.features[feature]
-                current_contig = self.contigs[current_feature.contig_name]
-                current_feature.add_sequence(current_contig, measure_stats=update_feature_stats)
-        # and finally, iterate back through the entries to add any holistic stats:
+        # and optionally, iterate back through all the features to add any holistic stats:
         if update_feature_stats:
             for feature_ID,feature in self.features.items():
+                # If the feature 'Parent' stat had been renamed (i.e. by PIRATE), update/restore this first
                 if feature.Parent in self.renamed_parents:
                     feature.Parent = self.renamed_parents.get(feature.Parent)
+                # Then, create a dictionary of non-existing features to add 
                 more_info_to_add = {'index': feature.idx,
-                                    'progenitor': feature.family.progenitor,
-                                    'sequence_length': feature.sequence_length,
-                                    'contig_sequence_length': self.contigs[feature.contig_name].length,
-                                    'contig_boundary_distance': feature.contig_boundary_dist,
-                                    'GC': feature.GC}
-                # Add ID stat to this for entries that were lacking an ID stat 
+                                    'progenitor': feature.family.progenitor}
+                # Include the ID stat for any entries that were missing one 
                 if feature_ID == feature.coords:
                     more_info_to_add[ID_stat] = feature.coords
+                # If contig fasta sequences were provided, add sequence stats
+                if len(self.contig_sequence) > 0:
+                    feature_contig = self.contigs[feature.contig_name]
+                    feature_sequence = ''.join(feature.sequence(feature_contig))
+                    more_info_to_add['sequence_length'] = len(feature_sequence)
+                    more_info_to_add['contig_sequence_length'] = feature_contig.length
+                    more_info_to_add['contig_boundary_distance'] = min(min(feature.start,feature.stop),feature_contig.length-max(feature.start,feature.stop))
+                    more_info_to_add['GC'] = 100*len(feature_sequence.replace('T','').replace('A',''))/len(feature_sequence)
+                # Finally, update the feature stats from the dictionary
                 self.features[feature_ID].update(more_info_to_add)
-        # including making a record of the data for all the relatives of each top parent
 
     def __repr__(self):
         return str(self.name) + '.gff'
@@ -401,7 +415,7 @@ class GFF:
             for feature_ID,current_feature in self.features.items():
                 corresponding_contig = current_feature.contig_name
                 if corresponding_contig not in skip_contigs and feature_ID not in skip_entries:
-                    outfile.write(self.features[feature_ID].write(update=True))
+                    outfile.write(self.features[feature_ID].write())
             if add_FASTA_sequence:
                 outfile.write('##FASTA\n')
                 if FASTA_Split_Every and type(FASTA_Split_Every) != int:
