@@ -167,12 +167,12 @@ class GFF_feature_heirarchy:
             else:
                 self.feature_tally[feature.seq_type] = 1
         # split between duplicated and unique feature types per feature_family
-        duplicates = []
+        duplicated_features = []
         for feature in self.feature_family:
             if self.feature_tally.get(feature.seq_type) < 2:
                 self.unique_features[feature.seq_type] = feature
             else:
-                duplicates.append((feature.ID,feature.seq_type))
+                duplicated_features.append((feature.ID,feature.seq_type))
         # for the duplicated feature types, add a number to the dictionary lookup
         duplicated_feature_types = [ft for ft in self.feature_tally if self.feature_tally[ft] > 1]
         for ft in duplicated_feature_types:
