@@ -122,7 +122,7 @@ class GFF_feature:
         assert type(feature_contig) == contig and len(feature_contig.sequence) > 0, '{} contig sequence not parsed'.format(feature_contig)
         if type(fasta_name_stats) == str:
             fasta_name_stats = [fasta_name_stats]
-        print_info = ['>{}'.format('_'.join([self.feature_info.get(stat) for stat in fasta_name_stats if stat in self.feature_info]))]
+        print_info = ['>{}'.format('_'.join([str(self.feature_info.get(stat)).replace(' ','-') for stat in fasta_name_stats if stat in self.feature_info]))]
         parse_sequence = self.sequence(feature_contig,us,ds,protein) ### troubleshooting.
         out_sequence = ''.join(parse_sequence) 
         split_value = split_every if split_every else len(out_sequence)
