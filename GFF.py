@@ -1,5 +1,6 @@
 ### DEPENDENCIES ###
 import re
+
 ### CLASS DEFINITIONS ###
 
 ### GFF contig object class
@@ -105,23 +106,24 @@ class GFF_feature:
         self.feature = self.raw_entry.split('\t')
         self.contig_name = new_contig_name
 
-    def sequence(self,feature_contig,us=0,ds=0):
+    def sequence(self,feature_contig,us=0,ds=0,protein=False):
         assert type(feature_contig) == contig and len(feature_contig.sequence) > 0, '{} contig sequence not parsed'.format(feature_contig)
         assert type(us) == int and type(ds) == int, 'upstream and downstream values must be numeric integers'
+        raw_ds = ds # to provide the unchanged downstream value for the translation function
         if self.strand == '-':
             us,ds = ds,us # swap upstream and downstream values if the sequnce is on the - strand
         parse_sequence = feature_contig.sequence[self.start+self.frame-1-us:self.stop+self.frame+ds].upper()
         if self.strand == '-':
             parse_sequence = parse_sequence.lower().replace('a','0').replace('t','2').replace('c','1').replace('g','3')
             parse_sequence = parse_sequence.replace('0','T').replace('2','A').replace('1','G').replace('3','C').upper()[::-1]
-        return parse_sequence
+        return translated(parse_sequence,raw_ds) if protein else parse_sequence
         
-    def print_sequence(self,feature_contig,fasta_name_stats='ID',split_every=None,us=0,ds=0):
+    def print_sequence(self,feature_contig,fasta_name_stats='ID',split_every=None,us=0,ds=0,protein=False):
         assert type(feature_contig) == contig and len(feature_contig.sequence) > 0, '{} contig sequence not parsed'.format(feature_contig)
         if type(fasta_name_stats) == str:
             fasta_name_stats = [fasta_name_stats]
         print_info = ['>{}'.format('_'.join([self.feature_info.get(stat) for stat in fasta_name_stats if stat in self.feature_info]))]
-        parse_sequence = self.sequence(feature_contig,us,ds) ### troubleshooting.
+        parse_sequence = self.sequence(feature_contig,us,ds,protein) ### troubleshooting.
         out_sequence = ''.join(parse_sequence) 
         split_value = split_every if split_every else len(out_sequence)
         print_info = print_info + [out_sequence[pos:pos+split_value] for pos in range(0, len(out_sequence), split_value)] 
@@ -424,3 +426,28 @@ class GFF:
                     if contig not in skip_contigs:
                         outfile.write(self.contigs[contig].print_sequence(split_every=FASTA_Split_Every))
                         outfile.write('\n')
+
+### HELPER FUNCTIONS ###
+
+def translated(nucleotide_string,downstream=0):
+    codon_table = {
+        'ATA':'I', 'ATC':'I', 'ATT':'I', 'ATG':'M', 'ACA':'T', 'ACC':'T', 'ACG':'T', 'ACT':'T',
+        'AAC':'N', 'AAT':'N', 'AAA':'K', 'AAG':'K', 'AGC':'S', 'AGT':'S', 'AGA':'R', 'AGG':'R',
+        'CTA':'L', 'CTC':'L', 'CTG':'L', 'CTT':'L', 'CCA':'P', 'CCC':'P', 'CCG':'P', 'CCT':'P',
+        'CAC':'H', 'CAT':'H', 'CAA':'Q', 'CAG':'Q', 'CGA':'R', 'CGC':'R', 'CGG':'R', 'CGT':'R',
+        'GTA':'V', 'GTC':'V', 'GTG':'V', 'GTT':'V', 'GCA':'A', 'GCC':'A', 'GCG':'A', 'GCT':'A',
+        'GAC':'D', 'GAT':'D', 'GAA':'E', 'GAG':'E', 'GGA':'G', 'GGC':'G', 'GGG':'G', 'GGT':'G',
+        'TCA':'S', 'TCC':'S', 'TCG':'S', 'TCT':'S', 'TTC':'F', 'TTT':'F', 'TTA':'L', 'TTG':'L',
+        'TAC':'Y', 'TAT':'Y', 'TAA':'*', 'TAG':'*', 'TGC':'C', 'TGT':'C', 'TGA':'*', 'TGG':'W',
+    }
+    protein_sequence = []
+    # If the length of downstream sequence included is not a multiple of 3, shorten the sequence first until it is
+    nucleotide_string = nucleotide_string[0:len(nucleotide_string)-(downstream % 3)]
+    print(downstream)
+    # Iterate over the sequence in steps of 3 nucleotides (codon)
+    frame_shift = len(nucleotide_string) % 3 # removes nucleotides from start of sequence to keep to frame
+    for nt_pos in range(0 + frame_shift, len(nucleotide_string) - 2, 3):
+        codon = nucleotide_string[nt_pos:nt_pos+3]
+        amino_acid = codon_table.get(codon, '?')  # uses '?' to represent unknown codons
+        protein_sequence.append(amino_acid)
+    return ''.join(protein_sequence)

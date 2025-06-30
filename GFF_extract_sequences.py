@@ -20,6 +20,15 @@ def parse_args():
         help="For numeric columns, specifies the arithmetic operation to use for filtering, and the filtering value.\n\
         Input must be three space-delimited strings in the format 'feature stat' 'operation' 'value'\n\
         Operation must be one of '==', '!=', '>=', or '<='.")
+    parser.add_argument("-us", "--upstream",
+        default=0,
+        help="The length (bp) of upstream sequence to include (must be a multiple of 3 for protein). Default: '0'.")
+    parser.add_argument("-ds", "--downstream",
+        default=0,
+        help="The length (bp) of downstream sequence to include (must be a multiple of 3 for protein). Default: '0'.")
+    parser.add_argument("-t", "--translate",
+        action="store_true",
+        help="The length (bp) of downstream sequence to include (must be a multiple of 3 for protein). Default: '0'.")
     return parser.parse_args()
 
 # collect user arguments
@@ -29,6 +38,17 @@ output_file_name = args.output_file_name
 lookup = args.lookup
 stat_name = args.stat_name
 filtering = args.filtering
+us = args.upstream
+ds = args.downstream
+translate_to_protein = args.translate
+
+# convert us and ds to integers in case they aren't
+try:
+    us = int(us)
+    ds = int(ds)
+except:
+    print('upstream and downstream values must be numeric integers')
+    sys.exit
 
 # parse data for user arguments and handle poor input values
 if stat_name:
@@ -85,5 +105,6 @@ if len(selected_features) == 0:
 # extract nucleotide sequences
 with open(output_file_name,'w') as outfile:
     for feature in selected_features:
-        sequence = feature.print_sequence(split_every=60)
+        contig_with_feature = gff_input.contigs.get(feature.contig_name)
+        sequence = feature.print_sequence(contig_with_feature,split_every=60,us=us,ds=ds,protein=translate_to_protein)
         outfile.write(sequence + '\n')
