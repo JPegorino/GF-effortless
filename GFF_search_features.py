@@ -16,7 +16,7 @@ def parse_args():
         help="Output delimiter.")
     parser.add_argument("-fh", "--fasta_header",
         default="ID",
-        help="A semi-colon delimited list of stats to use for generating the FASTA header. Default: 'ID'.")
+        help="A semi-colon delimited subset of stats to display, or to use for generating the FASTA header. Default: 'ID'.")
     parser.add_argument("-us", "--upstream",
         default=0,
         help="The length (bp) of upstream sequence to include (must be a multiple of 3 for protein). Default: '0'.")
@@ -69,9 +69,17 @@ for my_out in out_feature:
     elif out_format == 'stats':
         for key,value in my_out.feature_info.items():
             print(f'{out_delimiter}'.join([key,str(value)]))
+    elif out_format == 'subset':
+        for stat in fasta_header.split(';'):
+            if stat in my_out.feature_info:
+                print(f'{out_delimiter}'.join([stat,str(my_out.feature_info.get(value))]))
     elif out_format == 'tab' or out_format == 'table':
         print(f'{out_delimiter}'.join(my_out.feature_info.keys()))
         print(f'{out_delimiter}'.join([str(val) for val in my_out.feature_info.values()]))
+    elif out_format == 'subtab' or out_format == 'subset_table':
+        stat_subset = {key:my_out.feature_info.get(key) for key in fasta_header.split(';') if key in my_out.feature_info} 
+        print(f'{out_delimiter}'.join(key for key in stat_subset.keys()))
+        print(f'{out_delimiter}'.join([str(val) for val in stat_subset.values()]))
     elif out_format == 'fasta' or out_format == 'ffn':    
         print(my_out.print_sequence(gff_input.contigs.get(my_out.contig_name),split_every=60,fasta_name_stats=fasta_header.split(';'),us=us,ds=ds))
     elif out_format == 'protein' or out_format == 'faa':    
