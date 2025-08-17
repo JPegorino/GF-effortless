@@ -1,5 +1,5 @@
 ### DEPENDENCIES ###
-import re
+import re, os
 
 ### CLASS DEFINITIONS ###
 
@@ -214,11 +214,12 @@ class GFF_feature_heirarchy:
 
 ### Main GFF file object class
 class GFF:
-    def __init__(self, file, ID_stat='ID', update_feature_stats=False, alt_ID_stat=None):
+    def __init__(self, file, ID_stat='ID', update_feature_stats=False, alt_fasta_file=None, alt_ID_stat=None):
         self.file = file
         self.name = self.file.split('/')[-1].split('.gff')[0]
         self.file_info = []
         self.in_order = True
+        self.includes_FASTA = False
         self.contigs = {}
         self.contig_count = len(self.contigs)
         self.contig_sequence = []
@@ -267,6 +268,7 @@ class GFF:
                                 self.renamed_parents[current_feature.lookup('prev_ID')] = current_feature.ID
                     # add sequence data from the end of the file, if it is there
                 elif line.startswith('>'):
+                    self.includes_FASTA = True
                     if len(self.contig_sequence) > 0: # if the sequence of a previous contig is not currently parsed and stored 
                         current_contig.concatenate_sequence(''.join(self.contig_sequence)) # add it to the data for the contig
                         self.contig_sequence = [] # and wipe the storage variable to start parsing the next contig
@@ -274,7 +276,7 @@ class GFF:
                     for character in range(len(line)):
                         if line in self.contigs or len(line) == 0:
                             if len(line) == 0:
-                                print('Warning: No contig name in fasta feature. Contig fasta sequences were incorrectly parsed.')
+                                print('Warning: Contig names are not matched in FASTA sequence headers.')
                             current_contig = self.contigs[line] ; break
                         else:
                             line = line[0:len(line)-1]
@@ -282,7 +284,33 @@ class GFF:
                     self.contig_sequence.append(line)
             current_contig.concatenate_sequence(''.join(self.contig_sequence)) # store the parsed data for the final contig
         
-        # summary info
+        # if no sequence data was found in the GFF file, try to find FASTA sequences in a separate file
+        if not self.includes_FASTA: # if no contig FASTA sequences were identified in the GFF file
+            if not alt_fasta_file: # use any user specified alternative FASTA
+                for extension in ['.fna','.fasta','.fa']: # or seatch for an epynomous file (in the same directory) with a FASTA extension
+                    alt_fasta_file = self.file.replace('.gff',extension)
+                    if os.file.exists(alt_fasta_file):
+                        continue
+            assert os.file.exists(alt_fasta_file), 'No contigs in GFF file and no alternative FASTA file {} found.'.format(alt_fasta_file)
+            with open(alt_fasta_file,'r') as infile:
+                for line in infile:
+                    if line.startswith('>'):
+                        if len(self.contig_sequence) > 0: # if the sequence of a previous contig is not currently parsed and stored 
+                            current_contig.concatenate_sequence(''.join(self.contig_sequence)) # add it to the data for the contig
+                            self.contig_sequence = [] # and wipe the storage variable to start parsing the next contig
+                        line = line.lstrip('>')
+                        for character in range(len(line)):
+                            if line in self.contigs or len(line) == 0:
+                                if len(line) == 0:
+                                    print('Warning: Contig names are not matched in FASTA sequence headers.')
+                                current_contig = self.contigs[line] ; break
+                            else:
+                                line = line[0:len(line)-1]
+                    else:
+                        self.contig_sequence.append(line)
+                current_contig.concatenate_sequence(''.join(self.contig_sequence)) # store the parsed data for the final contig
+        
+        # generate summary info
         self.all_recorded_stats = set(sum(all_recorded_stats, []))
 
         # re-iterate through the data to add information that requires the entire parsed file.
