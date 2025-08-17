@@ -289,9 +289,9 @@ class GFF:
             if not alt_fasta_file: # use any user specified alternative FASTA
                 for extension in ['.fna','.fasta','.fa']: # or seatch for an epynomous file (in the same directory) with a FASTA extension
                     alt_fasta_file = self.file.replace('.gff',extension)
-                    if os.file.exists(alt_fasta_file):
-                        continue
-            assert os.file.exists(alt_fasta_file), 'No contigs in GFF file and no alternative FASTA file {} found.'.format(alt_fasta_file)
+                    if os.path.exists(alt_fasta_file):
+                        break
+            assert os.path.exists(alt_fasta_file), 'No contigs in GFF file and no alternative FASTA file {} found.'.format(alt_fasta_file)
             with open(alt_fasta_file,'r') as infile:
                 for line in infile:
                     if line.startswith('>'):
