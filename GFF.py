@@ -342,7 +342,7 @@ class GFF:
                 last_feature = family_heirarchy.stop
                 self.coords[current_index] = family_heirarchy
             elif family_heirarchy.stop < last_feature:
-                print('\Warning! Feature order in file does not match ordering on contig. Indices will be invalid.\n'.format(parent_ID))                
+                print('Warning! Feature order in file does not match ordering on contig. Indices will be invalid.\n'.format(parent_ID))                
             # add heirarchy objects and indices to all features
             for relative in family_list:
                 relative.family = family_heirarchy
@@ -499,3 +499,4 @@ def translated(nucleotide_string,downstream=0):
         amino_acid = codon_table.get(codon, '?')  # uses '?' to represent unknown codons
         protein_sequence.append(amino_acid)
     return ''.join(protein_sequence)
+
