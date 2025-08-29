@@ -109,14 +109,15 @@ class GFF_feature:
     def sequence(self,feature_contig,us=0,ds=0,protein=False):
         assert type(feature_contig) == contig and len(feature_contig.sequence) > 0, '{} contig sequence not parsed'.format(feature_contig)
         assert type(us) == int and type(ds) == int, 'upstream and downstream values must be numeric integers'
-        raw_ds = ds # to provide the unchanged downstream value for the translation function
+        if protein:
+            us *= 3 ; ds *= 3
         if self.strand == '-':
             us,ds = ds,us # swap upstream and downstream values if the sequnce is on the - strand
         parse_sequence = feature_contig.sequence[self.start+self.frame-1-us:self.stop+self.frame+ds].upper()
         if self.strand == '-':
             parse_sequence = parse_sequence.lower().replace('a','0').replace('t','2').replace('c','1').replace('g','3')
             parse_sequence = parse_sequence.replace('0','T').replace('2','A').replace('1','G').replace('3','C').upper()[::-1]
-        return translated(parse_sequence,raw_ds) if protein else parse_sequence
+        return translated(parse_sequence) if protein else parse_sequence
         
     def print_sequence(self,feature_contig,fasta_name_stats='ID',split_every=None,us=0,ds=0,protein=False):
         assert type(feature_contig) == contig and len(feature_contig.sequence) > 0, '{} contig sequence not parsed'.format(feature_contig)
@@ -385,7 +386,7 @@ class GFF:
         if feature_lookup in self.features:
             out_feature = self.features.get(feature_lookup)
              # the code below allows retreival of data for an alternate feature type in the same family (e.g. CDS info for a gene) if there is only one
-            if feature_type in out_feature.family.unique_features.keys(): # this only works for 1:1 rep=lationships, e.g. one CDS per gene
+            if feature_type in out_feature.family.unique_features.keys(): # this only works for 1:1 relationships, e.g. one CDS per gene
                 out_feature = out_feature.family.unique_features.get(feature_type)
             elif feature_type:
                 print('Warining: no unique {} feature in {} feature heirarchy'.format(feature_type,feature_lookup))
@@ -477,7 +478,7 @@ class GFF:
 
 ### HELPER FUNCTIONS ###
 
-def translated(nucleotide_string,downstream=0):
+def translated(nucleotide_string):
     codon_table = {
         'ATA':'I', 'ATC':'I', 'ATT':'I', 'ATG':'M', 'ACA':'T', 'ACC':'T', 'ACG':'T', 'ACT':'T',
         'AAC':'N', 'AAT':'N', 'AAA':'K', 'AAG':'K', 'AGC':'S', 'AGT':'S', 'AGA':'R', 'AGG':'R',
@@ -489,12 +490,8 @@ def translated(nucleotide_string,downstream=0):
         'TAC':'Y', 'TAT':'Y', 'TAA':'*', 'TAG':'*', 'TGC':'C', 'TGT':'C', 'TGA':'*', 'TGG':'W',
     }
     protein_sequence = []
-    # If the length of downstream sequence included is not a multiple of 3, shorten the sequence first until it is
-    nucleotide_string = nucleotide_string[0:len(nucleotide_string)-(downstream % 3)]
-    print(downstream)
-    # Iterate over the sequence in steps of 3 nucleotides (codon)
-    frame_shift = len(nucleotide_string) % 3 # removes nucleotides from start of sequence to keep to frame
-    for nt_pos in range(0 + frame_shift, len(nucleotide_string) - 2, 3):
+    assert len(nucleotide_string) % 3 == 0, "Nucleotide sequence length must a multiple of three."
+    for nt_pos in range(0, len(nucleotide_string) - 2, 3):
         codon = nucleotide_string[nt_pos:nt_pos+3]
         amino_acid = codon_table.get(codon, '?')  # uses '?' to represent unknown codons
         protein_sequence.append(amino_acid)
