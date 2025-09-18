@@ -386,7 +386,7 @@ class GFF:
         if feature_lookup in self.features:
             out_feature = self.features.get(feature_lookup)
              # the code below allows retreival of data for an alternate feature type in the same family (e.g. CDS info for a gene) if there is only one
-            if feature_type in out_feature.family.unique_features.keys(): # this only works for 1:1 rep=lationships, e.g. one CDS per gene
+            if feature_type in out_feature.family.unique_features.keys(): # this only works for 1:1 relationships, e.g. one CDS per gene
                 out_feature = out_feature.family.unique_features.get(feature_type)
             elif feature_type:
                 print('Warining: no unique {} feature in {} feature heirarchy'.format(feature_type,feature_lookup))
