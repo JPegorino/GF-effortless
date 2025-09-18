@@ -704,9 +704,9 @@ if __name__ == "__main__":
 
     if out_format == 'fa' or out_format == 'fna':
         with open(out_file,'a') as outfile:
-            for i,contig in gff_input.contigs.items():
-                if i in range(1,gff_input.contig_count+1):
-                    outfile.write(contig.print_sequence(reverse_strand=False,split_every=split_every,region=False,rename=False)+'\n')
+            for i in range(1,gff_input.contig_count+1):
+                current_contig = gff_input.contigs.get(i)
+                outfile.write(current_contig.print_sequence(reverse_strand=False,split_every=split_every,region=False,rename=False)+'\n')
     elif out_format == 'gff':
         gff_input.to_newfile(out_file=out_file,
             rename_contigs=False,update_stats=update_gff_stats,
