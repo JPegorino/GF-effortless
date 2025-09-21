@@ -11,10 +11,10 @@ class contig:
         self.length = int(entry.split(' ')[3])
         self.sequence = ''
         self.number = number
-        
+
     def __repr__(self):
         return self.name
-    
+
     def rename(self,new_name=None,include_number=False):
         if not new_name:
             new_name = self.name
@@ -24,10 +24,10 @@ class contig:
                 new_name = str(new_name) + add_number
         self.contig = self.contig.replace(self.name,new_name)
         self.name = new_name
-        
+
     def concatenate_sequence(self,sequence_to_concatenate):
         self.sequence = self.sequence + sequence_to_concatenate
-        
+
     def print_sequence(self,reverse_strand=False,split_every=None,region=False,rename=False):
         out_sequence = self.sequence if not region else self.sequence[region[0]-1:region[1]]
         if reverse_strand:
@@ -36,9 +36,9 @@ class contig:
         out_name = rename if rename else self.name
         split_value = split_every if split_every else len(self.sequence)
         print_info='>{}'.format(out_name)
-        print_info = [print_info] + [out_sequence[pos:pos+split_value] for pos in range(0, int(len(out_sequence)), split_value)] 
+        print_info = [print_info] + [out_sequence[pos:pos+split_value] for pos in range(0, int(len(out_sequence)), split_value)]
         return '\n'.join(print_info)
-        
+
     def write(self):
         return self.contig + '\n'
 
@@ -52,7 +52,7 @@ class GFF_feature:
         self.frame = int(self.feature[7]) if self.feature[7] in list('012') else 0
         self.start = int(self.feature[3]) ; self.stop = int(self.feature[4])
         self.contig_number = contig_number
-        self.coords = '{}~{}~{}'.format(self.contig_number,self.start,self.stop) 
+        self.coords = '{}~{}~{}'.format(self.contig_number,self.start,self.stop)
         self.feature_info = {stat.split('=')[0]:stat.split('=')[1] for stat in self.feature[len(self.feature)-1].split(';')}
         if ID_stat in self.feature_info.keys():
             self.ID = self.feature_info[ID_stat]
@@ -65,7 +65,7 @@ class GFF_feature:
         self.Parent = self.feature_info.get('Parent') if 'Parent' in self.feature_info else self.ID
         self.family = self.Parent
         self.records = self.feature_info.keys()
-        
+
     def __repr__(self):
         return self.ID
 
@@ -96,7 +96,7 @@ class GFF_feature:
             if stat in self.feature_info.keys():
                 if not overwrite:
                     stat = retain_old + str(stat)
-                    assert stat not in self.feature_info, '{}: cannot have duplicate attributes per feature'.format(stat)                    
+                    assert stat not in self.feature_info, '{}: cannot have duplicate attributes per feature'.format(stat)
             self.feature_info[stat] = stats_to_add.get(stat)
         self.records = self.feature_info.keys()
 
@@ -118,16 +118,16 @@ class GFF_feature:
             parse_sequence = parse_sequence.lower().replace('a','0').replace('t','2').replace('c','1').replace('g','3')
             parse_sequence = parse_sequence.replace('0','T').replace('2','A').replace('1','G').replace('3','C').upper()[::-1]
         return translated(parse_sequence) if protein else parse_sequence
-      
+
     def print_sequence(self,feature_contig,fasta_name_stats='ID',split_every=None,us=0,ds=0,protein=False):
         assert type(feature_contig) == contig and len(feature_contig.sequence) > 0, '{} contig sequence not parsed'.format(feature_contig)
         if type(fasta_name_stats) == str:
             fasta_name_stats = [fasta_name_stats]
         print_info = ['>{}'.format('_'.join([str(self.feature_info.get(stat)).replace(' ','-') for stat in fasta_name_stats if stat in self.feature_info]))]
         parse_sequence = self.sequence(feature_contig,us,ds,protein) ### troubleshooting.
-        out_sequence = ''.join(parse_sequence) 
+        out_sequence = ''.join(parse_sequence)
         split_value = split_every if split_every else len(out_sequence)
-        print_info = print_info + [out_sequence[pos:pos+split_value] for pos in range(0, len(out_sequence), split_value)] 
+        print_info = print_info + [out_sequence[pos:pos+split_value] for pos in range(0, len(out_sequence), split_value)]
         return '\n'.join(print_info)
 
     def write(self,bed=False,raw=False,bed_score='NA_default',bed_color='NA_default'):
@@ -208,7 +208,7 @@ class GFF_feature_heirarchy:
         # NB: these do not have directionality ('start' means 'first bp', not 'CDS start' or 'gene start')
         # finally, iterate through the extracted stats/attributes one last time to remove duplication
         self.all_feature_info = { stat: '; '.join(sorted(set(attributes.values()))) for stat,attributes in self.all_feature_info.items()}
-        self.attributes = {att: ', '.join(sorted(set(stat.split(',')))) for att,stat in self.attributes.items()}        
+        self.attributes = {att: ', '.join(sorted(set(stat.split(',')))) for att,stat in self.attributes.items()}
 
     def __str__(self):
         return self.progenitor # return just the progenitor ID if the heirarchy is printed as string
@@ -226,15 +226,15 @@ class GFF:
         self.contig_sequence = []
         self.feature_count = 1
         self.features = {} # a dictionary for all features (separate parents and children) to match feature objects
-        self.families = {} # a dictionary for parents only to match with children 
-        self.children = {} # a dictionary of children (only) to match with IDs of their parent 
-        self.renamed_parents = {} # a dictionary for parents with modified IDs to match with their old IDs 
+        self.families = {} # a dictionary for parents only to match with children
+        self.children = {} # a dictionary of children (only) to match with IDs of their parent
+        self.renamed_parents = {} # a dictionary for parents with modified IDs to match with their old IDs
         self.indexed_features = {} # a dictionary for heirarchies (families) by index
         self.coords = {} # a dictionary for all features families by their co-ordinates
 
         # read through the file and parse information line by line
         with open(self.file,'r') as infile:
-            all_recorded_stats = [] # a list to record each unique combination of recorded stats per gff file 
+            all_recorded_stats = [] # a list to record each unique combination of recorded stats per gff file
             for line in infile:
                 line = line.rstrip('\n')
                 if line.startswith('##'):
@@ -261,7 +261,7 @@ class GFF:
                         self.features[current_feature.ID] = current_feature
                         if 'Parent' in current_feature.records:
                             self.children[current_feature.ID] = current_feature.Parent
-                        else: # if there is no parent, we define this feature as a progenitor 
+                        else: # if there is no parent, we define this feature as a progenitor
                             self.families[current_feature.ID] = [current_feature] # enter data as list, starting with progenitor
                             # some prokaryote pangenome tools rename GFF features by ID, which should be handled here
                             # e.g. PIRATE modifies parent feature IDs without updating the 'Parent' stat in the child entries
@@ -270,7 +270,7 @@ class GFF:
                     # add sequence data from the end of the file, if it is there
                 elif line.startswith('>'):
                     self.includes_FASTA = True
-                    if len(self.contig_sequence) > 0: # if the sequence of a previous contig is not currently parsed and stored 
+                    if len(self.contig_sequence) > 0: # if the sequence of a previous contig is not currently parsed and stored
                         current_contig.concatenate_sequence(''.join(self.contig_sequence)) # add it to the data for the contig
                         self.contig_sequence = [] # and wipe the storage variable to start parsing the next contig
                     line = line.lstrip('>')
@@ -284,7 +284,7 @@ class GFF:
                 else:
                     self.contig_sequence.append(line)
             current_contig.concatenate_sequence(''.join(self.contig_sequence)) # store the parsed data for the final contig
-        
+
         # if no sequence data was found in the GFF file, try to find FASTA sequences in a separate file
         if not self.includes_FASTA: # if no contig FASTA sequences were identified in the GFF file
             if not alt_fasta_file: # use any user specified alternative FASTA
@@ -296,7 +296,7 @@ class GFF:
             with open(alt_fasta_file,'r') as infile:
                 for line in infile:
                     if line.startswith('>'):
-                        if len(self.contig_sequence) > 0: # if the sequence of a previous contig is not currently parsed and stored 
+                        if len(self.contig_sequence) > 0: # if the sequence of a previous contig is not currently parsed and stored
                             current_contig.concatenate_sequence(''.join(self.contig_sequence)) # add it to the data for the contig
                             self.contig_sequence = [] # and wipe the storage variable to start parsing the next contig
                         line = line.lstrip('>')
@@ -310,7 +310,7 @@ class GFF:
                     else:
                         self.contig_sequence.append(line)
                 current_contig.concatenate_sequence(''.join(self.contig_sequence)) # store the parsed data for the final contig
-        
+
         # generate summary info
         self.all_recorded_stats = set(sum(all_recorded_stats, []))
 
@@ -324,7 +324,7 @@ class GFF:
             elif self.renamed_parents.get(parent_ID):
                 guess_parent_ID = self.renamed_parents.get(parent_ID)
                 self.families.get(guess_parent_ID).append(self.features.get(child_ID))
-            else: 
+            else:
                 print('\nError! Parent ID {} not found in file and no "Prev_ID" or equivalent stat for conversion\n'.format(parent_ID))
         # use the completed dictionary to create and add heirarchy objects to the GFF/feature objects and use these to add feature indices
         last_contig,current_index=(0,0) # to keep track of index order (helps check order of features in file)
@@ -343,7 +343,7 @@ class GFF:
                 last_feature = family_heirarchy.stop
                 self.coords[current_index] = family_heirarchy
             elif family_heirarchy.stop < last_feature:
-                print('Warning! Feature order in file does not match ordering on contig. Indices will be invalid.\n'.format(parent_ID))                
+                print('Warning! Feature order in file does not match ordering on contig. Indices will be invalid.\n'.format(parent_ID))
             # add heirarchy objects and indices to all features
             for relative in family_list:
                 relative.family = family_heirarchy
@@ -355,10 +355,10 @@ class GFF:
                 # If the feature 'Parent' stat had been renamed (i.e. by PIRATE), update/restore this first
                 if feature.Parent in self.renamed_parents:
                     feature.Parent = self.renamed_parents.get(feature.Parent)
-                # Then, create a dictionary of non-existing features to add 
+                # Then, create a dictionary of non-existing features to add
                 more_info_to_add = {'index': feature.idx,
                                     'family': feature.family.progenitor}
-                # Include the ID stat for any entries that were missing one 
+                # Include the ID stat for any entries that were missing one
                 if feature_ID == feature.coords:
                     more_info_to_add[ID_stat] = feature.coords
                 # If contig fasta sequences were provided, add sequence stats
@@ -374,14 +374,14 @@ class GFF:
 
     def __repr__(self):
         return str(self.name) + '.gff'
-    
+
     def info(self,as_input=False):
         for piece_of_information in self.file_info:
             return piece_of_information if as_input else piece_of_information.lstrip('#')
 
     def fetch_feature_list(self):
         return [feature.ID for feature in self.features.values()]
-    
+
     def feature(self,feature_lookup,feature_type=None,strictly_first=True,regex=False):
         if feature_lookup in self.features:
             out_feature = self.features.get(feature_lookup)
@@ -416,7 +416,7 @@ class GFF:
             locus_feature = self.feature(locus)
             out_fasta.append(locus_feature.print_sequence(list_of_fasta_header_categories,split_every))
         return '\n'.join(out_fasta)
-    
+
     def measure_FASTA_sequence_split(self):
         sequence_line = False
         sequence_line_lengths = []
@@ -427,9 +427,9 @@ class GFF:
                 elif line.startswith('>'):
                     sequence_line = True
         return max(sequence_line_lengths)-1
-    
-    def rename_contigs(self,rename_contigs=True):      
-        rename_contigs = rename_contigs if type(rename_contigs) == str else self.name 
+
+    def rename_contigs(self,rename_contigs=True):
+        rename_contigs = rename_contigs if type(rename_contigs) == str else self.name
         new_names = {} ; new_contigs = {} # initialise blank dictionaries
         for contig_ID,current_contig in self.contigs.items():
             if rename_contigs in ['n','number','#']:
@@ -446,7 +446,7 @@ class GFF:
         self.contigs = new_contigs
         for feature_ID,current_feature in self.features.items():
             new_contig_name = new_names[current_feature.contig_name]
-            current_feature.rename_contig(new_contig_name)            
+            current_feature.rename_contig(new_contig_name)
 
     def to_newfile(self,out_file=False,
                 rename_contigs=True,update_stats=True,
@@ -497,7 +497,7 @@ def translated(nucleotide_string):
         protein_sequence.append(amino_acid)
     return ''.join(protein_sequence)
 
-                
+
 # Main PROGGLE script:
 if __name__ == "__main__":
        # Custom help page format
@@ -510,12 +510,12 @@ if __name__ == "__main__":
         parser = argparse.ArgumentParser(
             description="Quickly edit GFF files, add and search for features, or extract feature and sequence data in various formats.",
             formatter_class=ProggleHelpFormatter)
-        parser.add_argument("gff_input", 
+        parser.add_argument("gff_input",
             help="Path to your GFF file to search or edit.")
-        parser.add_argument("-o", "--output_file_name", 
-            help="Output file name.\nDefault: 'None (print to screen) or overwrite (infer extension).' ",
+        parser.add_argument("-o", "--output_file_name",
+            help="Output file name.\nDefault: 'None (print to screen) if search, overwrite or convert (infer extension).' ",
             default=None)
-        parser.add_argument("-f", "--output_format", 
+        parser.add_argument("-f", "--output_format",
             help="Output format. Used as new file stem extension with overwrite. Must be one of:\n\
             none: The ID stat for each feature\n\
             coords: tab delimited ID, contig no., start and end of each feature\n\
@@ -532,10 +532,10 @@ if __name__ == "__main__":
             fasta | ffn: feature nucleotide sequences in multi-FASTA format\n\
             protein | faa: feature protein sequences in multi-FASTA format\n\
             contig | region: description")
-        parser.add_argument("-s", "--search", 
+        parser.add_argument("-s", "--search",
             default=None,
             help="Search criteria to extract a subset of features from the input file.")
-        parser.add_argument("-d", "--output_delimiter", 
+        parser.add_argument("-d", "--output_delimiter",
             default="\t",
             help="Output delimiter.")
         parser.add_argument("-fh", "--fasta_header",
@@ -552,14 +552,14 @@ if __name__ == "__main__":
             help="The no. characters per line in FASTA sequence output (must be an integer).\nDefault: '60'.")
         parser.add_argument("-u", "--update_stats",
             action="store_true",
-            help="Calculate additional statistics for feature entries?\nDefault: 'True'")
+            help="Calculate additional statistics for feature entries?\nDefault: 'False'")
         parser.add_argument("-x", "-ow", "--overwrite",
-            action="store_false",
+            action="store_true",
             help="Allow overwriting if named output file exists?\nDefault: 'False'")
         parser.add_argument("-r", "--rename_contigs",
             nargs="?",
             const=True,
-            default=False, 
+            default=False,
             help="Customise how contigs are renamed in output.\n\
             Default: Retain input contig names in output files.\n\
             Input: 'n','number', or '#', appends contig no. to existing names (if absent).\n\
@@ -584,8 +584,22 @@ if __name__ == "__main__":
             help="Do not inclue FASTA sequence in GFF output file.")
         return parser.parse_args()
 
-    def write_feature(my_out,out_format,output_file=None):
-        def return_string(string,output_file=output_file):
+    def write_region(out_region,out_format,rstart=0,rstop=0,output_file=None,rename_in_fasta=False,fasta_split=60):
+        def return_string(input_data,output_file=output_file):
+            string = str(input_data)
+            if output_file:
+                output_file.write(string)
+                output_file.write('\n')
+            else:
+                print(string)
+        out_contig = gff_input.contigs.get(out_region)
+        use_region = (rstart,rstop) if (rstop + rstart) != 0 else False
+        out_sequence = out_region.print_sequence(reverse_strand=(rstart>rstop),split_every=fasta_split,region=use_region,rename=rename_in_fasta)
+        return_string(out_sequence)
+
+    def write_feature(my_out,out_format,output_file=None,fasta_split=60):
+        def return_string(input_data,output_file=output_file):
+            string = str(input_data)
             if output_file:
                 output_file.write(string)
                 output_file.write('\n')
@@ -597,7 +611,7 @@ if __name__ == "__main__":
             return_string(str(my_out.ID) + '\t' + my_out.coords.replace('~','\t'))
         elif out_format == 'features':
             return_string(my_out.feature_info)
-        elif out_format == 'number' or out_format == 'index':
+        elif out_format == 'number' or out_format == 'n' or out_format == 'Number' or out_format == 'N' or out_format == 'index' or out_format == 'idx':
             return_string(my_out.idx)
         elif out_format == 'bed':
             return_string(my_out.write(bed=True))
@@ -609,22 +623,29 @@ if __name__ == "__main__":
         elif out_format == 'subset':
             for stat in fasta_header.split(';'):
                 if stat in my_out.feature_info:
-                    return_string(f'{out_delimiter}'.join([stat,str(my_out.feature_info.get(value))]))
+                    return_string(f'{out_delimiter}'.join([stat,str(my_out.feature_info.get(stat))]))
         elif out_format == 'tab' or out_format == 'table':
             return_string(f'{out_delimiter}'.join(my_out.feature_info.keys()))
             return_string(f'{out_delimiter}'.join([str(val) for val in my_out.feature_info.values()]))
         elif out_format == 'subtab' or out_format == 'subset_table':
-            stat_subset = {key:my_out.feature_info.get(key) for key in fasta_header.split(';') if key in my_out.feature_info} 
+            stat_subset = {key:my_out.feature_info.get(key) for key in fasta_header.split(';') if key in my_out.feature_info}
             return_string(f'{out_delimiter}'.join(key for key in stat_subset.keys()))
             return_string(f'{out_delimiter}'.join([str(val) for val in stat_subset.values()]))
-        elif out_format == 'fasta' or out_format == 'ffn':    
-            return_string(my_out.print_sequence(gff_input.contigs.get(my_out.contig_name),split_every=60,fasta_name_stats=fasta_header.split(';'),us=us,ds=ds))
-        elif out_format == 'protein' or out_format == 'faa':    
-            return_string(my_out.print_sequence(gff_input.contigs.get(my_out.contig_name),fasta_header.split(';'),split_every=60,us=us,ds=ds,protein=True))
-        elif out_format == 'contig' or out_format == 'region':    
+        elif out_format == 'fasta' or out_format == 'ffn':
+            return_string(my_out.print_sequence(gff_input.contigs.get(my_out.contig_name),split_every=fasta_split,fasta_name_stats=fasta_header.split(';'),us=us,ds=ds))
+        elif out_format == 'protein' or out_format == 'faa':
+            return_string(my_out.print_sequence(gff_input.contigs.get(my_out.contig_name),fasta_header.split(';'),split_every=fasta_split,us=us,ds=ds,protein=True))
+        elif out_format == 'contig' or out_format == 'region':
             out_contig = gff_input.contigs.get(my_out.contig_name)
-            reverse_strand = True if my_out.strand == '-' else False
-            return_string(out_contig.print_sequence(reverse_strand=reverse_strand,split_every=60,region=(us,ds),rename=fasta_header))
+            new_header = fasta_header if fasta_header not in my_out.feature_info else out_contig.name
+            reverse_strand = my_out.strand == '-'
+            if (us + ds) == 0:
+                rstart, rstop = 1, out_contig.length
+            else:
+                rstart, rstop = ds, us
+            if reverse_strand:
+                rstart, rstop = rstop, rstart
+            write_region(out_contig,out_format,rstart=rstart,rstop=rstop,output_file=out_file,rename_in_fasta=new_header,fasta_split=split_every)
         elif out_format in my_out.feature_info:
             return_string(my_out.feature_info.get(out_format))
         else:
@@ -666,61 +687,77 @@ if __name__ == "__main__":
     assert os.path.splitext(gff_input)[1] == ".gff", "Input provided is not the correct path to an existing GFF file."
     gff_input = GFF(gff_input.rstrip('/'),ID_stat=feature_ID_stat,update_feature_stats=update_gff_stats,alt_fasta_file=corresponding_fasta)
     if rename_contigs:
-            gff_input.rename_contigs(rename_contigs=rename_contigs)
+        gff_input.rename_contigs(rename_contigs=rename_contigs)
 
     # generate output file name
     if not out_file and not search_feature_info:
         # use input name if none specified (default)
         out_format = out_format if out_format else '.gff'
-        out_file = os.path.splitext(args.gff_input)[0] + '.' + out_format
+        out_format_ext = out_format + '.txt' if out_format in gff_input.all_recorded_stats else out_format
+        out_file = os.path.splitext(args.gff_input)[0] + '.' + out_format_ext
     if out_file:
         if os.path.isdir(out_file):
         # append input name to path if a path is specified
             if not os.path.exists(out_file):
                 os.makedirs(out_file)
-            out_format = out_format if out_format else '.gff'
-            out_file = os.path.join(out_file,(os.path.splitext(args.gff_input)[0] + '.' + out_format)) 
+            out_format_ext = out_format if out_format else '.gff'
+            out_format_ext = out_format_ext + '.txt' if out_format in gff_input.all_recorded_stats else out_format_ext
+            out_file = os.path.join(out_file,(os.path.splitext(args.gff_input)[0] + '.' + out_format_ext))
         if os.path.exists(out_file):
             # if the output file exists, the script must be in overwrite mode to overwrite
             assert overwrite, "Output file name '{}' matches existing file. Use '-x' to force overwrite. Exiting...".format(out_file)
 
     # conduct a single search if the search parameter was set - can then end script early
     if search_feature_info:
-        out_feature = gff_input.feature(search_feature_info)
-        if not out_feature:
-            out_feature = gff_input.feature(search_feature_info,strictly_first=False,regex=True)
-        if not out_feature:
-            print('Error: Nothing matched by search.')
-            sys.exit(1)
-        if type(out_feature) != list:
-            out_feature = [out_feature]
-        if out_file:
-            out_file = open(out_file,'a') if out_file else None
-        for feature in out_feature:
-            write_feature(feature,out_format,output_file=out_file)
-        if out_file:
-            out_file.close()
-        sys.exit(0)
+        if out_format in ('contig','region') and search_feature_info in gff_input.contigs:
+            out_region = gff_input.contigs.get(search_feature_info)
+            new_header = fasta_header if fasta_header not in gff_input.all_recorded_stats else None
+            write_region(out_region,out_format,rstart=us,rstop=ds,output_file=out_file,rename_in_fasta=new_header,fasta_split=split_every)
+            sys.exit(0)
+        else:
+            out_feature = gff_input.feature(search_feature_info)
+            if not out_feature:
+                out_feature = gff_input.feature(search_feature_info,strictly_first=False,regex=True)
+            if not out_feature:
+                print('Error: Nothing matched by search.')
+                sys.exit(1)
+            if type(out_feature) != list:
+                out_feature = [out_feature]
+            if out_file:
+                out_file = open(out_file,'a') if out_file else None
+            for feature in out_feature:
+                write_feature(feature,out_format,output_file=out_file,fasta_split=split_every)
+            if out_file:
+                out_file.close()
+            sys.exit(0)
 
     if out_format == 'fa' or out_format == 'fna':
         with open(out_file,'a') as outfile:
-            for i,contig in gff_input.contigs.items():
-                if i in range(1,gff_input.contig_count+1):
-                    outfile.write(contig.print_sequence(reverse_strand=False,split_every=split_every,region=False,rename=False)+'\n')
+            for i in range(1,gff_input.contig_count+1):
+                current_contig = gff_input.contigs.get(i)
+                if current_contig.name in filter_contigs or current_contig.number in filter_contigs:
+                    continue
+                outfile.write(current_contig.print_sequence(reverse_strand=False,split_every=split_every,region=False,rename=False)+'\n')
     elif out_format == 'gff':
         gff_input.to_newfile(out_file=out_file,
             rename_contigs=False,update_stats=update_gff_stats,
             add_FASTA_sequence=without_fasta,FASTA_Split_Every=split_every,
             skip_entries=filtering,skip_contigs=filter_contigs)
-    elif out_format in ['coords','ffn','fasta','stats','protein','faa','bed']:
+    elif out_format in ['subset', 'subset_table', 'subtab', 'features']:
+        print('Error: out_format {} cannot be applied.'.format(out_format))
+        sys.exit(1)
+    elif out_format in ['index','number','coords','ffn','fasta','stats','protein','faa','bed','tab','table']:
         with open(out_file,'a') as outfile:
             for feature in gff_input.features.values():
                 if feature.contig_name in filter_contigs or feature.contig_number in filter_contigs:
                     continue
                 if feature.seq_type != 'CDS' or feature.ID in filtering:
                     continue
-                write_feature(feature,out_format,output_file=outfile)
-                outfile.write('\n')
+                write_feature(feature,out_format,output_file=outfile,fasta_split=split_every)
+    elif out_format == 'contig' or out_format == 'region':
+        print('Error: To return contig sequences, use the --search (-s) parameter to specify the contig name or number.')
+        print('Error: For partial contig sequences, use upstream (-us) and downstream (-ds) parameters to specify start and end positions.')
+        sys.exit(1)
     else:
         print("Warning: reached file end without making a decision!")
         print(gff_input.all_recorded_stats)

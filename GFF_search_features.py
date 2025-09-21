@@ -5,13 +5,13 @@ import GFF # GFF parser
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Search a GFF for features and extract feature data.")
-    parser.add_argument("gff_input", 
+    parser.add_argument("gff_input",
         help="Path to your GFF file to search.")
-    parser.add_argument("search", 
+    parser.add_argument("search",
         help="Search criteria.")
-    parser.add_argument("-o", "--output_format", 
+    parser.add_argument("-o", "--output_format",
         help="Output format. Must be one of: TBD")
-    parser.add_argument("-d", "--output_delimiter", 
+    parser.add_argument("-d", "--output_delimiter",
         default="\t",
         help="Output delimiter.")
     parser.add_argument("-fh", "--fasta_header",
@@ -34,7 +34,7 @@ gff_input = GFF.GFF(args.gff_input.rstrip('/'),update_feature_stats=True)
 search_feature_info = args.search
 out_format = args.output_format
 out_delimiter = args.output_delimiter
-fasta_header = args.fasta_header 
+fasta_header = args.fasta_header
 try:
     us = int(args.upstream)
     ds = int(args.downstream)
@@ -72,19 +72,19 @@ for my_out in out_feature:
     elif out_format == 'subset':
         for stat in fasta_header.split(';'):
             if stat in my_out.feature_info:
-                print(f'{out_delimiter}'.join([stat,str(my_out.feature_info.get(value))]))
+                print(f'{out_delimiter}'.join([stat,str(my_out.feature_info.get(stat))]))
     elif out_format == 'tab' or out_format == 'table':
         print(f'{out_delimiter}'.join(my_out.feature_info.keys()))
         print(f'{out_delimiter}'.join([str(val) for val in my_out.feature_info.values()]))
     elif out_format == 'subtab' or out_format == 'subset_table':
-        stat_subset = {key:my_out.feature_info.get(key) for key in fasta_header.split(';') if key in my_out.feature_info} 
+        stat_subset = {key:my_out.feature_info.get(key) for key in fasta_header.split(';') if key in my_out.feature_info}
         print(f'{out_delimiter}'.join(key for key in stat_subset.keys()))
         print(f'{out_delimiter}'.join([str(val) for val in stat_subset.values()]))
-    elif out_format == 'fasta' or out_format == 'ffn':    
+    elif out_format == 'fasta' or out_format == 'ffn':
         print(my_out.print_sequence(gff_input.contigs.get(my_out.contig_name),split_every=60,fasta_name_stats=fasta_header.split(';'),us=us,ds=ds))
-    elif out_format == 'protein' or out_format == 'faa':    
+    elif out_format == 'protein' or out_format == 'faa':
         print(my_out.print_sequence(gff_input.contigs.get(my_out.contig_name),fasta_header.split(';'),split_every=60,us=us,ds=ds,protein=True))
-    elif out_format == 'contig' or out_format == 'region':    
+    elif out_format == 'contig' or out_format == 'region':
         out_contig = gff_input.contigs.get(my_out.contig_name)
         reverse_strand = True if my_out.strand == '-' else False
         print(out_contig.print_sequence(reverse_strand=reverse_strand,split_every=60,region=(us,ds),rename=fasta_header))
