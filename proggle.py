@@ -72,7 +72,7 @@ class GFF_feature:
     def add_family(self,heirarchy):
         self.family = heirarchy
 
-    def lookup(self,stat,regex=True):
+    def lookup(self,stat,regex=True,default_value=None):
         if stat in self.feature_info:
             return self.feature_info[stat]
         elif stat in self.family.all_feature_info:
@@ -88,7 +88,7 @@ class GFF_feature:
             matching_attributes = [attribute for attribute in self.family.attributes.keys() if pattern.search(attribute)]
             return matching_attributes #if len(matching_attributes) > 0 else 'NA'
         else:
-            return None
+            return default_value
 
     def update(self,stats_to_add,retain_old='raw_',overwrite=False):
         assert type(stats_to_add) == dict, 'stats must be provided as a dictionary'
