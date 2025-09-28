@@ -1,5 +1,5 @@
 ### IMPORT DEPENDENCIES ###
-import sys, os, io, re, warnings, argparse
+import sys, os, io, re, csv, warnings, argparse
 
 ### CLASS DEFINITIONS ###
 
@@ -218,6 +218,7 @@ class GFF:
     def __init__(self, file, ID_stat='ID', update_feature_stats=False, alt_fasta_file=None, alt_ID_stat=None):
         self.file = file
         self.name = self.file.split('/')[-1].split('.gff')[0]
+        self.metadata = {'Genome': self.name}
         self.file_info = []
         self.in_order = True
         self.includes_FASTA = False
@@ -288,11 +289,11 @@ class GFF:
         # if no sequence data was found in the GFF file, try to find FASTA sequences in a separate file
         if not self.includes_FASTA: # if no contig FASTA sequences were identified in the GFF file
             if not alt_fasta_file: # use any user specified alternative FASTA
-                for extension in ['.fna','.fasta','.fa']: # or seatch for an epynomous file (in the same directory) with a FASTA extension
-                    alt_fasta_file = self.file.replace('.gff',extension)
+                for fasta_extension in ['.fna','.fasta','.fa']: # or search for an epynomous file (in the same directory) with a FASTA extension
+                    alt_fasta_file = self.file.replace('.gff',fasta_extension)
                     if os.path.exists(alt_fasta_file):
                         break
-            assert os.path.exists(alt_fasta_file), 'No contigs in GFF file and no alternative FASTA file {} found.'.format(alt_fasta_file)
+            validate_input_file(alt_fasta_file, enforced_extension=False, more_context='No sequences in GFF file and no alternative FASTA path provided.\nInferred alternative ')
             with open(alt_fasta_file,'r') as infile:
                 for line in infile:
                     if line.startswith('>'):
@@ -379,8 +380,25 @@ class GFF:
         for piece_of_information in self.file_info:
             return piece_of_information if as_input else piece_of_information.lstrip('#')
 
-    def fetch_feature_list(self):
-        return [feature.ID for feature in self.features.values()]
+    def rename_contigs(self,rename_contigs=True):
+        rename_contigs = rename_contigs if type(rename_contigs) == str else self.name
+        new_names = {} ; new_contigs = {} # initialise blank dictionaries
+        for contig_ID,current_contig in self.contigs.items():
+            if rename_contigs in ['n','number','#','Number','idx']:
+                current_contig.rename(new_name=False,include_number=True)
+            else:
+                current_contig.rename(new_name=rename_contigs,include_number=True)
+            if type(contig_ID) == str:
+                new_contig_name = current_contig.name
+                new_names[contig_ID] = new_contig_name
+            else:
+                new_contig_name = contig_ID
+            # creating a replacement dictionary within this loop preserves the order
+            new_contigs[new_contig_name] = current_contig
+        self.contigs = new_contigs
+        for feature_ID,current_feature in self.features.items():
+            new_contig_name = new_names[current_feature.contig_name]
+            current_feature.rename_contig(new_contig_name)
 
     def feature(self,feature_lookup,feature_type=None,strictly_first=True,regex=False):
         if feature_lookup in self.features:
@@ -408,6 +426,9 @@ class GFF:
                 out_feature = families_with_match
         return out_feature
 
+    def fetch_feature_list(self):
+        return [feature.ID for feature in self.features.values()]
+
     def fetch_feature_sequences(self,list_of_loci,list_of_fasta_header_categories,split_every=None):
         out_fasta = []
         if type(list_of_loci) == str:
@@ -416,6 +437,91 @@ class GFF:
             locus_feature = self.feature(locus)
             out_fasta.append(locus_feature.print_sequence(list_of_fasta_header_categories,split_every))
         return '\n'.join(out_fasta)
+
+    def add_feature_data(self,analysis_file,analysis_type='general',pad_missing=True,header_line_expected=True,only_extract_columns=False):
+        input_delimiter = ',' if analysis_file.endswith('.csv') else '\t' # always assumes tab-delimited input unless explicit csv file
+        analysis_types = { # a dictionary to match each analysis tool with the locus ID column and default keep columns
+            'pangenome' : (None, [0], 1), # currently, only pangenome tables are tested and supported
+            'general' : (0, None, header_line_expected)
+        } # a dictionary of sensible default values for the output tables of different tools
+        feature_column, keep_columns, header_line_expected = analysis_types.get(analysis_type)
+        header_line = validate_input_file(analysis_file,extract_header=True,delimiter=input_delimiter) 
+        # replace None-values with sensible alternatives
+        if not header_line_expected: # custom headers (validate_input_file just selects line 1 of file)
+            header_line = [ analysis_type + '_' + str(i) for i in range(1,len(header_line)+1) ]
+        if not feature_column: # genome (GFF file) name (assumes pangenome table)
+            estimate_feature_column_1 = estimate_feature_column_2 = os.path.splitext(self.file)[0]
+            for special_char in list('-.?!()[]{}|,'):
+                estimate_feature_column_2 = estimate_feature_column_2.replace(special_char,'_')
+            if estimate_feature_column_1 in header_line:
+                feature_column = header_line.index(estimate_feature_column_1)
+            elif estimate_feature_column_2 in header_line:
+                feature_column = header_line.index(estimate_feature_column_2)
+            else:
+                print(f'Error: Cannot add {analysis_type} data - feature column not identified in \n{header_line}.')
+                sys.exit(1)
+        if not keep_columns: # all columns
+            keep_columns = [ i for i in range(1,len(header_line)+1) ]
+        # if there are user-specified columns to keep, override the defaults with these 
+        if only_extract_columns:
+            only_extract_columns, parse_column_numbers = (only_extract_columns.split(','), [])
+            for i in only_extract_columns:
+                if '-' in i:
+                    try:
+                        i_start, i_end = map(int, i.split("-"))
+                        j = list(range(i_start, i_end+1))
+                    except:
+                        print("Error: only_extract_columns must be integers or a numeric range.")
+                        sys.exit(1)
+                else:
+                    j = [int(i)]
+                parse_column_numbers = parse_column_numbers + j
+                only_extract_columns = sorted(parse_column_numbers)
+            try: # if all the values are numeric integers, convert them to column numbers
+                keep_columns = [int(i)-1 for i in only_extract_columns]
+            except:
+                keep_columns = [header_line.index(header)-1 for header in only_extract_columns]
+        # extract the data from the file
+        add_data = {}
+        with open(analysis_file, 'r', newline='', encoding='utf-8-sig') as add_file:
+            analysis_data = csv.reader(add_file) # quoting=csv.QUOTE_NONE
+            for row in analysis_data:
+                key_data = row[feature_column]
+                if ';' in key_data or ':' in key_data:
+                    key_list = row[feature_column].replace('(','').replace('(','').split(':')
+                    for keys in key_list:
+                        for key in keys.split(';'):
+                            add_data[key] = {header_line[i].replace(' ','_'):row[i] for i in keep_columns}
+                else:
+                    add_data[key_data] = {header_line[i].replace(' ','_'):row[i] for i in keep_columns}
+        for feature_name,feature in self.features.items():
+            if feature_name in add_data.keys():
+                feature_analysis_data = add_data.get(feature_name)
+                feature.update(feature_analysis_data)
+            else:
+                if pad_missing:
+                    filler_dict = {header_line[i].replace(' ','_'):'None' for i in keep_columns}
+                    feature.update(filler_dict)
+
+    def add_metadata(self,metadata_filepath,only_extract_columns=False,input_delimiter='\t'):
+        header_line = validate_input_file(metadata_file,extract_header=True,delimiter=input_delimiter)
+        # if there are user-specified columns to keep, extract indices for these 
+        if only_extract_columns:  
+            only_extract_columns = only_extract_columns.split(';')
+            try: # if all the values are numeric integers, convert them to column numbers
+                keep_columns = [int(i)-1 for i in only_extract_columns]
+            except:
+                keep_columns = [header_line.index(header)-1 for header in only_extract_columns]
+        else:
+            keep_columns = [ i for i in range(1,len(header_line)+1) ] # all columns
+        # extract the data from the file
+        with open(metadata_filepath, 'r', newline='', encoding='utf-8-sig') as metadata_file:
+            metadata = csv.reader(metadata_file)
+            for row in metadata:
+                if row[0] == self.name:
+                    more_metadata = {header_line[i]:row[i] for i in keep_columns}
+                    break
+        self.metadata = self.metadata + more_metadata
 
     def measure_FASTA_sequence_split(self):
         sequence_line = False
@@ -427,26 +533,6 @@ class GFF:
                 elif line.startswith('>'):
                     sequence_line = True
         return max(sequence_line_lengths)-1
-
-    def rename_contigs(self,rename_contigs=True):
-        rename_contigs = rename_contigs if type(rename_contigs) == str else self.name
-        new_names = {} ; new_contigs = {} # initialise blank dictionaries
-        for contig_ID,current_contig in self.contigs.items():
-            if rename_contigs in ['n','number','#']:
-                current_contig.rename(new_name=False,include_number=True)
-            else:
-                current_contig.rename(new_name=rename_contigs,include_number=True)
-            if type(contig_ID) == str:
-                new_contig_name = current_contig.name
-                new_names[contig_ID] = new_contig_name
-            else:
-                new_contig_name = contig_ID
-            # creating a replacement dictionary within this loop preserves the order
-            new_contigs[new_contig_name] = current_contig
-        self.contigs = new_contigs
-        for feature_ID,current_feature in self.features.items():
-            new_contig_name = new_names[current_feature.contig_name]
-            current_feature.rename_contig(new_contig_name)
 
     def to_newfile(self,out_file=False,
                 rename_contigs=True,update_stats=True,
@@ -476,8 +562,20 @@ class GFF:
                         outfile.write(self.contigs[contig].print_sequence(split_every=FASTA_Split_Every))
                         outfile.write('\n')
 
-### HELPER FUNCTIONS ###
+### HELPER FUNCTIONS and objects ###
 
+ # a function to de-bug input files and extract header lines (if present)
+def validate_input_file(input_path,enforced_extension=None,more_context='',extract_header=False,delimiter='\t'):
+    assert os.path.exists(input_path), f'{more_context}{input_path} is not an accurate path to an existing file.'
+    assert os.path.getsize(input_path) > 0, f'{input_path} is an empty file.'
+    if enforced_extension:
+        input_file_extension = os.path.splitext(input_path)[1] # extract the file extension
+        assert input_file_extension == enforced_extension, f'Filetype error: must have {enforced_extension} extension.'
+    if extract_header:
+        with open(input_path, newline='', encoding='utf-8-sig') as infile:
+            return next(csv.reader(infile, delimiter=delimiter), None)
+
+ # a function to translate nucleotide sequences to protein
 def translated(nucleotide_string):
     codon_table = {
         'ATA':'I', 'ATC':'I', 'ATT':'I', 'ATG':'M', 'ACA':'T', 'ACC':'T', 'ACG':'T', 'ACT':'T',
@@ -496,7 +594,6 @@ def translated(nucleotide_string):
         amino_acid = codon_table.get(codon, '?')  # uses '?' to represent unknown codons
         protein_sequence.append(amino_acid)
     return ''.join(protein_sequence)
-
 
 # Main PROGGLE script:
 if __name__ == "__main__":
@@ -553,6 +650,16 @@ if __name__ == "__main__":
         parser.add_argument("-u", "--update_stats",
             action="store_true",
             help="Calculate additional statistics for feature entries?\nDefault: 'False'")
+        parser.add_argument("-m", "--metadata",
+            default=None,
+            help="Path to corresponding genome/organism metadata file.\nDefault: 'False'")
+        parser.add_argument("-a", "--add_data",
+            default=None,
+            nargs="+",
+            help="Add feature data from tabular output file?\n\
+            Must be 2-3 ' ' delimited strings in the format 'File_path' 'Analysis-type' 'Columns'.\n\
+            Analysis-type must be one of 'general', 'pangenome' or 'blast_subject'.\n\
+            Columns (optional) must be a ','-delimited string of column numbers or number ranges in the format 'X-Y', e.g.'1;3;5-8;11'.")
         parser.add_argument("-x", "-ow", "--overwrite",
             action="store_true",
             help="Allow overwriting if named output file exists?\nDefault: 'False'")
@@ -576,6 +683,8 @@ if __name__ == "__main__":
             help="Python list of contigs to exclude from output, or a min. length threshold (integer).\nDefault 'None'")
         parser.add_argument("-ff", "--filter_features",
             default=None,
+            nargs="+",
+            type=str,
             help="Arithmetic operation to filter features.\n\
             Must be 3 ' ' delimited strings in the format 'stat' 'operation' 'value'.\n\
             Operation must be one of '==', '!=', '>=', or '<='.")
@@ -660,6 +769,8 @@ if __name__ == "__main__":
     search_feature_info = args.search
     out_delimiter = args.output_delimiter
     fasta_header = args.fasta_header
+    feature_analysis_data = args.add_data
+    genome_metadata = args.metadata
     update_gff_stats = args.update_stats
     corresponding_fasta = args.sequence_file
     feature_ID_stat = args.ID_stat
@@ -681,13 +792,27 @@ if __name__ == "__main__":
         assert type(filtering[2]) == int, "{} is not a numeric integer".format(filtering[2])
     else:
         filtering = []
+    # parse data from filtering 'add feature data' parameter
+    if feature_analysis_data:
+        analysis_types = ['general', 'pangenome', 'blast_subject']
+        if len(feature_analysis_data) == 1:
+            feature_analysis_data.append('general')
+        assert feature_analysis_data[1] in analysis_types, "Operation must be one of {}, not {}".format(str(analysis_types),feature_analysis_data[1])
+        if len(feature_analysis_data) < 3:
+            feature_analysis_data.append(None)
 
     # read GFF input file
-    assert os.path.exists(gff_input), "Input provided is not the correct path to an existing GFF file."
-    assert os.path.splitext(gff_input)[1] == ".gff", "Input provided is not the correct path to an existing GFF file."
+    validate_input_file(gff_input, enforced_extension='.gff')
     gff_input = GFF(gff_input.rstrip('/'),ID_stat=feature_ID_stat,update_feature_stats=update_gff_stats,alt_fasta_file=corresponding_fasta)
     if rename_contigs:
         gff_input.rename_contigs(rename_contigs=rename_contigs)
+    if genome_metadata:
+        try:
+            gff_input.add_metadata(genome_metadata)
+        except:
+            print('Warning: Could not add genome metadata.')
+    if feature_analysis_data:
+        gff_input.add_feature_data(feature_analysis_data[0],analysis_type=feature_analysis_data[1],only_extract_columns=feature_analysis_data[2],pad_missing=True)
 
     # generate output file name
     if not out_file and not search_feature_info:
@@ -759,5 +884,5 @@ if __name__ == "__main__":
         print('Error: For partial contig sequences, use upstream (-us) and downstream (-ds) parameters to specify start and end positions.')
         sys.exit(1)
     else:
-        print("Warning: reached file end without making a decision!")
+        print("Warning: reached script end without making a decision!")
         print(gff_input.all_recorded_stats)
