@@ -856,7 +856,7 @@ if __name__ == "__main__":
             if not out_feature:
                 out_feature = gff_input.feature(search_feature_info,strictly_first=False,regex=True)
             if not out_feature:
-                raise Exception("Error: Nothing matched by search.')
+                raise Exception("Error: Nothing matched by search.")
             if type(out_feature) != list:
                 out_feature = [out_feature]
             if out_file:
