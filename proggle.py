@@ -223,7 +223,7 @@ class GFF_feature_heirarchy:
 class GFF:
     def __init__(self, file, ID_stat='ID', update_feature_stats=False, alt_fasta_file=None, alt_ID_stat=None):
         self.file = file
-        self.name = self.file.split('/')[-1].split('.gff')[0]
+        self.name = os.path.basename(os.path.splitext(self.file)[0])
         self.metadata = {'Genome': self.name}
         self.file_info = []
         self.in_order = True
@@ -456,7 +456,7 @@ class GFF:
         if not header_line_expected: # custom headers (validate_input_file just selects line 1 of file)
             header_line = [ analysis_type + '_' + str(i) for i in range(1,len(header_line)+1) ]
         if not feature_column: # genome (GFF file) name (assumes pangenome table)
-            estimate_feature_column_1 = estimate_feature_column_2 = os.path.splitext(self.file)[0]
+            estimate_feature_column_1 = estimate_feature_column_2 = self.name
             for special_char in list('-.?!()[]{}|,'):
                 estimate_feature_column_2 = estimate_feature_column_2.replace(special_char,'_')
             if estimate_feature_column_1 in header_line:
@@ -464,7 +464,7 @@ class GFF:
             elif estimate_feature_column_2 in header_line:
                 feature_column = header_line.index(estimate_feature_column_2)
             else:
-                raise ValueError(f"Error: Cannot add {analysis_type} data - feature column {feature_column} not identified in \n{header_line}.")
+                raise ValueError(f"Cannot add {analysis_type} data - feature column {feature_column} not identified in \n{header_line}.")
         if not keep_columns: # all columns
             keep_columns = [ i for i in range(1,len(header_line)+1) ]
         # if there are user-specified columns to keep, override the defaults with these 
@@ -621,8 +621,9 @@ if __name__ == "__main__":
             help="Output file name.\nDefault: 'None (print to screen) if search, overwrite or convert (infer extension).' ",
             default=None)
         parser.add_argument("-f", "--output_format",
+            default=None,
             help="Output format. Used as new file stem extension with overwrite. Must be one of:\n\
-            none: The ID stat for each feature\n\
+            none (default): The ID stat for each feature\n\
             coords: tab delimited ID, contig no., start and end of each feature\n\
             features: description\n\
             number: description\n\
@@ -874,7 +875,7 @@ if __name__ == "__main__":
                 if current_contig.name in filter_contigs or current_contig.number in filter_contigs:
                     continue
                 outfile.write(current_contig.print_sequence(reverse_strand=False,split_every=split_every,region=False,rename=False)+'\n')
-    elif out_format == 'gff':
+    elif not out_format or out_format == 'gff':
         gff_input.to_newfile(out_file=out_file,
             rename_contigs=False,update_stats=update_gff_stats,
             add_FASTA_sequence=without_fasta,FASTA_Split_Every=split_every,
