@@ -464,7 +464,7 @@ class GFF:
             elif estimate_feature_column_2 in header_line:
                 feature_column = header_line.index(estimate_feature_column_2)
             else:
-                raise ValueError(f"Error: Cannot add {analysis_type} data - feature column not identified in \n{header_line}.")
+                raise ValueError(f"Error: Cannot add {analysis_type} data - feature column {feature_column} not identified in \n{header_line}.")
         if not keep_columns: # all columns
             keep_columns = [ i for i in range(1,len(header_line)+1) ]
         # if there are user-specified columns to keep, override the defaults with these 
