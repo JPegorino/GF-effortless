@@ -880,7 +880,7 @@ if __name__ == "__main__":
             add_FASTA_sequence=without_fasta,FASTA_Split_Every=split_every,
             skip_entries=filtering,skip_contigs=filter_contigs)
     elif out_format in ['subset', 'subset_table', 'subtab', 'features']:
-        raise ValueError("Error: out_format {} cannot be applied.'.format(out_format))
+        raise ValueError("Error: out_format {} cannot be applied.".format(out_format))
     elif out_format in ['index','number','coords','ffn','fasta','stats','protein','faa','bed','tab','table']:
         with open(out_file,'a') as outfile:
             for feature in gff_input.features.values():
