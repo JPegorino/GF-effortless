@@ -91,24 +91,29 @@ class GFF_feature:
             return default_value
 
     def update(self,stats_to_add,retain_old='raw_',overwrite=False):
-        assert type(stats_to_add) == dict, 'stats must be provided as a dictionary'
+        if not type(stats_to_add) == dict:
+            raise TypeError('stats must be provided as a dictionary')
         for stat in stats_to_add.keys():
             if stat in self.feature_info.keys():
                 if not overwrite:
                     stat = retain_old + str(stat)
-                    assert stat not in self.feature_info, '{}: cannot have duplicate attributes per feature'.format(stat)
+                    if not stat not in self.feature_info:
+                        raise AssertionError('{}: cannot have duplicate attributes per feature'.format(stat))
             self.feature_info[stat] = stats_to_add.get(stat)
         self.records = self.feature_info.keys()
 
     def rename_contig(self,new_contig_name):
-        assert type(new_contig_name) == str, 'contig names must be strings.'
+        if not type(new_contig_name) == str:
+            raise TypeError('contig names must be strings.')
         self.raw_entry = self.raw_entry.replace(self.contig_name,new_contig_name)
         self.feature = self.raw_entry.split('\t')
         self.contig_name = new_contig_name
 
     def sequence(self,feature_contig,us=0,ds=0,protein=False):
-        assert type(feature_contig) == contig and len(feature_contig.sequence) > 0, '{} contig sequence not parsed'.format(feature_contig)
-        assert type(us) == int and type(ds) == int, 'upstream and downstream values must be numeric integers'
+        if not type(feature_contig) == contig and len(feature_contig.sequence) > 0:
+            raise Exception('{} contig sequence not parsed'.format(feature_contig))
+        if not type(us) == int and type(ds) == int:
+            raise TypeError('upstream and downstream values must be numeric integers')
         if protein:
             us *= 3 ; ds *= 3
         if self.strand == '-':
@@ -120,7 +125,8 @@ class GFF_feature:
         return translated(parse_sequence) if protein else parse_sequence
 
     def print_sequence(self,feature_contig,fasta_name_stats='ID',split_every=None,us=0,ds=0,protein=False):
-        assert type(feature_contig) == contig and len(feature_contig.sequence) > 0, '{} contig sequence not parsed'.format(feature_contig)
+        if not type(feature_contig) == contig and len(feature_contig.sequence) > 0:
+            raise Exception('{} contig sequence not parsed'.format(feature_contig))
         if type(fasta_name_stats) == str:
             fasta_name_stats = [fasta_name_stats]
         print_info = ['>{}'.format('_'.join([str(self.feature_info.get(stat)).replace(' ','-') for stat in fasta_name_stats if stat in self.feature_info]))]
@@ -326,7 +332,7 @@ class GFF:
                 guess_parent_ID = self.renamed_parents.get(parent_ID)
                 self.families.get(guess_parent_ID).append(self.features.get(child_ID))
             else:
-                print('\nError! Parent ID {} not found in file and no "Prev_ID" or equivalent stat for conversion\n'.format(parent_ID))
+                raise KeyError('Error! Parent ID {} not found in file and no "Prev_ID" or equivalent stat for conversion'.format(parent_ID))
         # use the completed dictionary to create and add heirarchy objects to the GFF/feature objects and use these to add feature indices
         last_contig,current_index=(0,0) # to keep track of index order (helps check order of features in file)
         for progenitor,family_list in self.families.items():
@@ -458,8 +464,7 @@ class GFF:
             elif estimate_feature_column_2 in header_line:
                 feature_column = header_line.index(estimate_feature_column_2)
             else:
-                print(f'Error: Cannot add {analysis_type} data - feature column not identified in \n{header_line}.')
-                sys.exit(1)
+                raise ValueError(f"Error: Cannot add {analysis_type} data - feature column not identified in \n{header_line}.")
         if not keep_columns: # all columns
             keep_columns = [ i for i in range(1,len(header_line)+1) ]
         # if there are user-specified columns to keep, override the defaults with these 
@@ -471,8 +476,7 @@ class GFF:
                         i_start, i_end = map(int, i.split("-"))
                         j = list(range(i_start, i_end+1))
                     except:
-                        print("Error: only_extract_columns must be integers or a numeric range.")
-                        sys.exit(1)
+                        raise ValueError("Error: only_extract_columns must be integers or a numeric range.")
                 else:
                     j = [int(i)]
                 parse_column_numbers = parse_column_numbers + j
@@ -566,11 +570,14 @@ class GFF:
 
  # a function to de-bug input files and extract header lines (if present)
 def validate_input_file(input_path,enforced_extension=None,more_context='',extract_header=False,delimiter='\t'):
-    assert os.path.exists(input_path), f'{more_context}{input_path} is not an accurate path to an existing file.'
-    assert os.path.getsize(input_path) > 0, f'{input_path} is an empty file.'
+    if not os.path.exists(input_path):
+        raise FileNotFoundError(f'{more_context}{input_path} is not an accurate path to an existing file.')
+    if os.path.getsize(input_path) == 0:
+        raise EOFError(f'{input_path} is an empty file.')
     if enforced_extension:
         input_file_extension = os.path.splitext(input_path)[1] # extract the file extension
-        assert input_file_extension == enforced_extension, f'Filetype error: must have {enforced_extension} extension.'
+        if input_file_extension != enforced_extension:
+            raise ValueError(f'Filetype error: must have {enforced_extension} extension, not {input_file_extension}.')
     if extract_header:
         with open(input_path, newline='', encoding='utf-8-sig') as infile:
             return next(csv.reader(infile, delimiter=delimiter), None)
@@ -588,7 +595,8 @@ def translated(nucleotide_string):
         'TAC':'Y', 'TAT':'Y', 'TAA':'*', 'TAG':'*', 'TGC':'C', 'TGT':'C', 'TGA':'*', 'TGG':'W',
     }
     protein_sequence = []
-    assert len(nucleotide_string) % 3 == 0, "Nucleotide sequence length must a multiple of three."
+    if not len(nucleotide_string) % 3 == 0:
+        raise ValueError("Nucleotide sequence length must be a multiple of three.")
     for nt_pos in range(0, len(nucleotide_string) - 2, 3):
         codon = nucleotide_string[nt_pos:nt_pos+3]
         amino_acid = codon_table.get(codon, '?')  # uses '?' to represent unknown codons
@@ -783,13 +791,15 @@ if __name__ == "__main__":
         ds = int(args.downstream)
         split_every = int(args.fasta_split_every)
     except:
-        print('upstream and downstream values must be numeric integers')
-        sys.exit
+        raise TypeError("Error: split_every, upstream and downstream values must be numeric integers")
     # parse filtering information from filtering input parameter
     if filtering:
-        assert filtering[0] in gff_input.all_recorded_stats, "{} information is not recorded for gff features.".format(filtering[0])
-        assert filtering[1] in ['==','!=','>=','<='], "Operation must be one of ['==', '!=', '>=', or '<=']".format(filtering[2])
-        assert type(filtering[2]) == int, "{} is not a numeric integer".format(filtering[2])
+        if not filtering[0] in gff_input.all_recorded_stats:
+            raise ValueError("{} information is not recorded for gff features.".format(filtering[0]))
+        if not filtering[1] in ['==','!=','>=','<=']:
+            raise ValueError("Operation must be one of ['==', '!=', '>=', or '<=']".format(filtering[2]))
+        if not type(filtering[2]) == int:
+            raise TypeError("{} is not a numeric integer".format(filtering[2]))
     else:
         filtering = []
     # parse data from filtering 'add feature data' parameter
@@ -797,7 +807,8 @@ if __name__ == "__main__":
         analysis_types = ['general', 'pangenome', 'blast_subject']
         if len(feature_analysis_data) == 1:
             feature_analysis_data.append('general')
-        assert feature_analysis_data[1] in analysis_types, "Operation must be one of {}, not {}".format(str(analysis_types),feature_analysis_data[1])
+        if not feature_analysis_data[1] in analysis_types:
+            raise ValueError("Operation must be one of {}, not {}".format(str(analysis_types),feature_analysis_data[1]))
         if len(feature_analysis_data) < 3:
             feature_analysis_data.append(None)
 
@@ -810,7 +821,7 @@ if __name__ == "__main__":
         try:
             gff_input.add_metadata(genome_metadata)
         except:
-            print('Warning: Could not add genome metadata.')
+            print("Warning: Could not add genome metadata.")
     if feature_analysis_data:
         gff_input.add_feature_data(feature_analysis_data[0],analysis_type=feature_analysis_data[1],only_extract_columns=feature_analysis_data[2],pad_missing=True)
 
@@ -830,7 +841,8 @@ if __name__ == "__main__":
             out_file = os.path.join(out_file,(os.path.splitext(args.gff_input)[0] + '.' + out_format_ext))
         if os.path.exists(out_file):
             # if the output file exists, the script must be in overwrite mode to overwrite
-            assert overwrite, "Output file name '{}' matches existing file. Use '-x' to force overwrite. Exiting...".format(out_file)
+            if not overwrite:
+                raise RuntimeError("Output file name '{}' matches existing file. Use '-x' to force overwrite. Exiting...".format(out_file))
 
     # conduct a single search if the search parameter was set - can then end script early
     if search_feature_info:
@@ -844,8 +856,7 @@ if __name__ == "__main__":
             if not out_feature:
                 out_feature = gff_input.feature(search_feature_info,strictly_first=False,regex=True)
             if not out_feature:
-                print('Error: Nothing matched by search.')
-                sys.exit(1)
+                raise Exception("Error: Nothing matched by search.")
             if type(out_feature) != list:
                 out_feature = [out_feature]
             if out_file:
@@ -869,8 +880,7 @@ if __name__ == "__main__":
             add_FASTA_sequence=without_fasta,FASTA_Split_Every=split_every,
             skip_entries=filtering,skip_contigs=filter_contigs)
     elif out_format in ['subset', 'subset_table', 'subtab', 'features']:
-        print('Error: out_format {} cannot be applied.'.format(out_format))
-        sys.exit(1)
+        raise ValueError("Error: out_format {} cannot be applied.'.format(out_format))
     elif out_format in ['index','number','coords','ffn','fasta','stats','protein','faa','bed','tab','table']:
         with open(out_file,'a') as outfile:
             for feature in gff_input.features.values():
@@ -880,9 +890,8 @@ if __name__ == "__main__":
                     continue
                 write_feature(feature,out_format,output_file=outfile,fasta_split=split_every)
     elif out_format == 'contig' or out_format == 'region':
-        print('Error: To return contig sequences, use the --search (-s) parameter to specify the contig name or number.')
-        print('Error: For partial contig sequences, use upstream (-us) and downstream (-ds) parameters to specify start and end positions.')
-        sys.exit(1)
+        raise Exception("Error: To return contig sequences, use the --search (-s) parameter to specify the contig name or number.\n\
+        Error: For partial contig sequences, use upstream (-us) and downstream (-ds) parameters to specify start and end positions.")
     else:
         print("Warning: reached script end without making a decision!")
         print(gff_input.all_recorded_stats)
