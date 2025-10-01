@@ -464,7 +464,7 @@ class GFF:
             elif estimate_feature_column_2 in header_line:
                 feature_column = header_line.index(estimate_feature_column_2)
             else:
-                raise ValueError(f"Error: Cannot add {analysis_type} data - feature column {feature_column} not identified in \n{header_line}.")
+                raise ValueError(f"Cannot add {analysis_type} data - feature column {feature_column} not identified in \n{header_line}.")
         if not keep_columns: # all columns
             keep_columns = [ i for i in range(1,len(header_line)+1) ]
         # if there are user-specified columns to keep, override the defaults with these 
@@ -476,7 +476,7 @@ class GFF:
                         i_start, i_end = map(int, i.split("-"))
                         j = list(range(i_start, i_end+1))
                     except:
-                        raise ValueError("Error: only_extract_columns must be integers or a numeric range.")
+                        raise ValueError("only_extract_columns must be integers or a numeric range.")
                 else:
                     j = [int(i)]
                 parse_column_numbers = parse_column_numbers + j
@@ -488,7 +488,7 @@ class GFF:
         # extract the data from the file
         add_data = {}
         with open(analysis_file, 'r', newline='', encoding='utf-8-sig') as add_file:
-            analysis_data = csv.reader(add_file) # quoting=csv.QUOTE_NONE
+            analysis_data = csv.reader(add_file, delimiter=input_delimiter) # quoting=csv.QUOTE_NONE
             for row in analysis_data:
                 key_data = row[feature_column]
                 if ';' in key_data or ':' in key_data:
@@ -509,6 +509,7 @@ class GFF:
 
     def add_metadata(self,metadata_filepath,only_extract_columns=False,input_delimiter='\t'):
         header_line = validate_input_file(metadata_file,extract_header=True,delimiter=input_delimiter)
+        input_delimiter = ',' if metadata_file.endswith('.csv') else '\t' # always assumes tab-delimited input unless explicit csv file
         # if there are user-specified columns to keep, extract indices for these 
         if only_extract_columns:  
             only_extract_columns = only_extract_columns.split(';')
@@ -520,7 +521,7 @@ class GFF:
             keep_columns = [ i for i in range(1,len(header_line)+1) ] # all columns
         # extract the data from the file
         with open(metadata_filepath, 'r', newline='', encoding='utf-8-sig') as metadata_file:
-            metadata = csv.reader(metadata_file)
+            metadata = csv.reader(metadata_file, delimiter=input_delimiter)
             for row in metadata:
                 if row[0] == self.name:
                     more_metadata = {header_line[i]:row[i] for i in keep_columns}
@@ -791,7 +792,7 @@ if __name__ == "__main__":
         ds = int(args.downstream)
         split_every = int(args.fasta_split_every)
     except:
-        raise TypeError("Error: split_every, upstream and downstream values must be numeric integers")
+        raise TypeError("split_every, upstream and downstream values must be numeric integers")
     # parse filtering information from filtering input parameter
     if filtering:
         if not filtering[0] in gff_input.all_recorded_stats:
@@ -880,7 +881,7 @@ if __name__ == "__main__":
             add_FASTA_sequence=without_fasta,FASTA_Split_Every=split_every,
             skip_entries=filtering,skip_contigs=filter_contigs)
     elif out_format in ['subset', 'subset_table', 'subtab', 'features']:
-        raise ValueError("Error: out_format {} cannot be applied.".format(out_format))
+        raise ValueError("out_format {} cannot be applied.".format(out_format))
     elif out_format in ['index','number','coords','ffn','fasta','stats','protein','faa','bed','tab','table']:
         with open(out_file,'a') as outfile:
             for feature in gff_input.features.values():
