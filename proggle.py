@@ -743,8 +743,8 @@ if __name__ == "__main__":
                 if stat in my_out.feature_info:
                     return_string(f'{out_delimiter}'.join([stat,str(my_out.feature_info.get(stat))]))
         elif out_format == 'tab' or out_format == 'table':
-            return_string(f'{out_delimiter}'.join(my_out.feature_info.keys()))
-            return_string(f'{out_delimiter}'.join([str(val) for val in my_out.feature_info.values()]))
+            return_string(f'{out_delimiter}'.join(['Genome','Contig','Start','Stop'] + list(my_out.feature_info.keys())))
+            return_string(f'{out_delimiter}'.join([gff_input.name] + my_out.coords.split('~') + [str(val) for val in my_out.feature_info.values()]))
         elif out_format == 'subtab' or out_format == 'subset_table':
             stat_subset = {key:my_out.feature_info.get(key) for key in fasta_header.split(';') if key in my_out.feature_info}
             return_string(f'{out_delimiter}'.join(key for key in stat_subset.keys()))
