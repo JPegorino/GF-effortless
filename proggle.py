@@ -465,6 +465,9 @@ class GFF:
                 feature_column = header_line.index(estimate_feature_column_2)
             else:
                 raise ValueError(f"Cannot add {analysis_type} data - feature column {feature_column} not identified in \n{header_line}.")
+                if analysis_type == 'pangenome':
+                    raise ValueError(f"Estimated alternatives {estimate_feature_column_1} and {estimate_feature_column_2} not identified either.")
+
         if not keep_columns: # all columns
             keep_columns = [ i for i in range(1,len(header_line)+1) ]
         # if there are user-specified columns to keep, override the defaults with these 
@@ -827,17 +830,19 @@ if __name__ == "__main__":
     if feature_analysis_data:
         gff_input.add_feature_data(feature_analysis_data[0],analysis_type=feature_analysis_data[1],only_extract_columns=feature_analysis_data[2],pad_missing=True)
 
-    # generate output file name
-    if not out_file and not search_feature_info:
-        # use input name if none specified (default)
+    # use specified parameters to determine output file name
+    if not out_file and not search_feature_info: # search mode has no output file when printing to screen
         out_format = out_format if out_format else '.gff'
         out_format_ext = out_format + '.txt' if out_format in gff_input.all_recorded_stats else out_format
-        out_file = os.path.splitext(args.gff_input)[0] + '.' + out_format_ext
+        out_file = os.path.splitext(args.gff_input)[0] + '.' + out_format_ext # use input name if none specified (default)
     if out_file:
+        out_path = os.path.dirname(out_file)
+        if out_path and not os.path.exists(out_path):
+            os.makedirs(out_path)
         if os.path.isdir(out_file):
         # append input name to path if a path is specified
             if not os.path.exists(out_file):
-                os.makedirs(out_file)
+                os.makedir(out_file)
             out_format_ext = out_format if out_format else '.gff'
             out_format_ext = out_format_ext + '.txt' if out_format in gff_input.all_recorded_stats else out_format_ext
             out_file = os.path.join(out_file,(os.path.splitext(args.gff_input)[0] + '.' + out_format_ext))
@@ -892,8 +897,8 @@ if __name__ == "__main__":
                     continue
                 write_feature(feature,out_format,output_file=outfile,fasta_split=split_every)
     elif out_format == 'contig' or out_format == 'region':
-        raise Exception("Error: To return contig sequences, use the --search (-s) parameter to specify the contig name or number.\n\
-        Error: For partial contig sequences, use upstream (-us) and downstream (-ds) parameters to specify start and end positions.")
+        raise RuntimeError("To return contig sequences, use the --search (-s) parameter to specify the contig name or number.\n\
+        For partial contig sequences, use upstream (-us) and downstream (-ds) parameters to specify start and end positions.")
     else:
         print("Warning: reached script end without making a decision!")
         print(gff_input.all_recorded_stats)
