@@ -342,13 +342,13 @@ class GFF:
             current_contig_number = family_heirarchy.progenitor_feature.contig_number
             if current_contig_number != last_contig:
                 # using round prevents floating point errors affecting the dictionary keys
-                self.coords[round(current_index+0.000001,6)] = "contig break"
+                self.indexed_features[round(current_index+0.000001,6)] = "contig break"
                 last_contig,last_feature,current_index = (current_contig_number,0,current_contig_number)
-                self.coords[current_index] = "contig break"
+                self.indexed_features[current_index] = "contig break"
             if family_heirarchy.stop > last_feature:
                 current_index = round(current_index+0.000001,6)
                 last_feature = family_heirarchy.stop
-                self.coords[current_index] = family_heirarchy
+                self.indexed_features[current_index] = family_heirarchy
             elif family_heirarchy.stop < last_feature:
                 print('Warning! Feature order in file does not match ordering on contig. Indices will be invalid.\n'.format(parent_ID))
             # add heirarchy objects and indices to all features
