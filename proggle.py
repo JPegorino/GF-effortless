@@ -78,6 +78,7 @@ class GFF_feature:
         elif stat in self.family.all_feature_info:
             output = self.family.all_feature_info[stat]
             if len(output.split(';'))>1:
+                # handles the issue of features in same family with conflicting data for same stat
                 return {feature_ID:feature.feature_info.get(stat) for feature_ID,feature in self.family.unique_features.items()}
             else:
                 return output
@@ -86,7 +87,7 @@ class GFF_feature:
         elif regex:
             pattern = re.compile(r"{}".format(stat))
             matching_attributes = [attribute for attribute in self.family.attributes.keys() if pattern.search(attribute)]
-            return matching_attributes #if len(matching_attributes) > 0 else 'NA'
+            return matching_attributes #if len(matching_attributes) > 0 else default_value
         else:
             return default_value
 
@@ -141,7 +142,7 @@ class GFF_feature:
             return self.raw_entry
         elif bed:
             if type(self.family) == GFF_feature_heirarchy:
-                progenitor = self.family.progenitor_feature
+                progenitor = self.family.progenitor
                 feature_start = str(progenitor.start-1)
                 feature_end = str(progenitor.stop)
             else:
@@ -162,8 +163,8 @@ class GFF_feature:
 class GFF_feature_heirarchy:
     def __init__(self, feature_family):
         self.feature_family = feature_family
-        self.progenitor = self.feature_family[0].ID
-        self.progenitor_feature = self.feature_family[0]
+        self.progenitor = self.feature_family[0]
+        self.progenitor_ID = self.progenitor.ID
         self.count = len(self.feature_family)
         self.start = 0
         self.stop = 0
@@ -217,7 +218,7 @@ class GFF_feature_heirarchy:
         self.attributes = {att: ', '.join(sorted(set(stat.split(',')))) for att,stat in self.attributes.items()}
 
     def __str__(self):
-        return self.progenitor # return just the progenitor ID if the heirarchy is printed as string
+        return self.progenitor_ID # return just the progenitor ID if the heirarchy is printed as string
 
 ### Main GFF file object class
 class GFF:
@@ -334,19 +335,18 @@ class GFF:
             else:
                 raise KeyError('Error! Parent ID {} not found in file and no "Prev_ID" or equivalent stat for conversion'.format(parent_ID))
         # use the completed dictionary to create and add heirarchy objects to the GFF/feature objects and use these to add feature indices
-        last_contig,current_index=(0,0) # to keep track of index order (helps check order of features in file)
+        last_contig,current_index=(0,1000000-1) # to keep track of index order (helps check order of features in file)
         for progenitor,family_list in self.families.items():
             family_heirarchy = GFF_feature_heirarchy(family_list)
             self.families[progenitor] = family_heirarchy
             # determine feature indices for progenitors (features in the same family should have matching indices)
-            current_contig_number = family_heirarchy.progenitor_feature.contig_number
-            if current_contig_number != last_contig:
-                # using round prevents floating point errors affecting the dictionary keys
-                self.indexed_features[round(current_index+0.000001,6)] = "contig break"
-                last_contig,last_feature,current_index = (current_contig_number,0,current_contig_number)
+            current_contig_number = family_heirarchy.progenitor.contig_number
+            if current_contig_number != last_contig: # start of new contig
+                self.indexed_features[current_index+1] = "contig break"
+                last_contig,last_feature,current_index = (current_contig_number,0,1000000*current_contig_number)
                 self.indexed_features[current_index] = "contig break"
             if family_heirarchy.stop > last_feature:
-                current_index = round(current_index+0.000001,6)
+                current_index +=1
                 last_feature = family_heirarchy.stop
                 self.indexed_features[current_index] = family_heirarchy
             elif family_heirarchy.stop < last_feature:
@@ -364,7 +364,7 @@ class GFF:
                     feature.Parent = self.renamed_parents.get(feature.Parent)
                 # Then, create a dictionary of non-existing features to add
                 more_info_to_add = {'index': feature.idx,
-                                    'family': feature.family.progenitor}
+                                    'family': feature.family.progenitor_ID}
                 # Include the ID stat for any entries that were missing one
                 if feature_ID == feature.coords:
                     more_info_to_add[ID_stat] = feature.coords
@@ -406,31 +406,87 @@ class GFF:
             new_contig_name = new_names[current_feature.contig_name]
             current_feature.rename_contig(new_contig_name)
 
-    def feature(self,feature_lookup,feature_type=None,strictly_first=True,regex=False):
+    def feature(self,feature_lookup,family=False,feature_type=None,default_value=None):
         if feature_lookup in self.features:
             out_feature = self.features.get(feature_lookup)
-             # the code below allows retreival of data for an alternate feature type in the same family (e.g. CDS info for a gene) if there is only one
+        elif feature_lookup in self.indexed_features:
+            try:
+                out_feature = self.indexed_features.get(feature_lookup).progenitor
+            except: 
+                print(f'Error: index {feature_lookup}')
+                print(f'matches "{self.indexed_features.get(feature_lookup)}"')
+                out_feature = self.indexed_features.get(feature_lookup).progenitor
+        else:
+            out_feature = default_value
+        if isinstance(out_feature, GFF_feature):
+            # the code below allows retreival of data for an alternate feature type in the same family (e.g. CDS info for a gene) if there is only one
             if feature_type in out_feature.family.unique_features.keys(): # this only works for 1:1 relationships, e.g. one CDS per gene
                 out_feature = out_feature.family.unique_features.get(feature_type)
             elif feature_type:
                 print('Warining: no unique {} feature in {} feature heirarchy'.format(feature_type,feature_lookup))
-        else:
-             # the code below will attempt retrieval of one or more features with data that matches the lookup, if it is not an ID
-            families_with_match = []
-            for feature_family in self.families.values():
-                progenitor_feature = self.features.get(feature_family.progenitor)
-                if progenitor_feature.lookup(feature_lookup,regex=regex):
-                    families_with_match.append(progenitor_feature)
-            if len(families_with_match) < 1:
-                out_feature = None
-            elif strictly_first or len(families_with_match) == 1:
-                out_feature = families_with_match[0]
-                if len(families_with_match) > 1:
-                    print('Warining: {} feature families with data to match {}, returning first'.format(len(families_with_match),feature_lookup))
-                out_feature = families_with_match
+            if family:
+                out_feature = out_feature.family
+        return out_feature # returns exactly one feature object, or 'None'
+
+    def search_features(self,feature_lookup,just_feature_type=None,regex=False):
+     # the code below will attempt retrieval of one or more features with data that matches the lookup, if it is not an ID
+        features_with_match = []
+        if feature_lookup in self.features:
+            out_feature = self.feature(feature_lookup,feature_type=just_feature_type)
+            features_with_match.append(out_feature)
+        elif feature_lookup in self.indexed_features:
+            out_feature_family = self.feature(feature_lookup)
+            if just_feature_type:
+                for feature_type in out_feature_family.unique_features.keys():
+                    if feature_type.startswith(just_feature_type):
+                        features_with_match.append(out_feature)
             else:
-                out_feature = families_with_match
-        return out_feature
+                for feature in out_feature_family.family:
+                    features_with_match.append(out_feature)
+        else:
+            for feature_family in self.families.values():
+                progenitor_feature = self.features.get(feature_family.progenitor_ID)
+                if progenitor_feature.lookup(feature_lookup,regex=regex):
+                    features_with_match.append(progenitor_feature)
+            features_with_match = features_with_match if len(features_with_match) > 0 else None
+        return features_with_match # returns a list of feature objects, or 'None'
+
+    def feature_region(self,feature_lookup,feature_type='CDS',us=0,ds=0,in_bp=False,include_self=True):
+        out_features = []
+        current_feature = self.feature(feature_lookup)
+        if not current_feature:
+            raise ValueError(f'input {feature_lookup} must be ID or proggle-formatted index of feature in file.')
+        current_feature_index = current_feature.idx
+        if current_feature.strand == '-':
+            us,ds = ds,us # swap upstream and downstream values if the sequnce is on the - strand
+        if in_bp: # us and ds are distances (bp) upstream/downstream of gene (instead of feature counts)
+            current_contig_length = self.contigs.get(current_feature.contig_name).length
+            us, ds = max(current_feature.start - us, 1), min(current_feature.stop + ds, current_contig_length)
+            current_index, current_start = current_feature.idx, current_feature.start
+            while current_start > us:
+                current_index -= 1
+                us_feature = self.feature(current_index,feature_type=feature_type)
+                current_start = us_feature.start
+            us = current_feature_index - current_index
+            current_index, current_stop = current_feature.idx, current_feature.stop
+            while current_stop < ds:
+                current_index += 1
+                ds_feature = self.feature(current_index,feature_type=feature_type)
+                current_stop = ds_feature.stop
+            ds = current_index - current_feature_index
+        us = current_feature_index - us
+        ds = current_feature_index + ds
+        for i in range(us,current_feature_index):
+            if i in self.indexed_features:
+                us_feature = self.feature(i,feature_type=feature_type)
+                out_features.append(us_feature)
+        if include_self:
+            out_features.append(current_feature)
+        for i in range(current_feature_index+1,ds+1):
+            if i in self.indexed_features:
+                ds_feature = self.feature(i,feature_type=feature_type)
+                out_features.append(ds_feature)
+        return out_features # returns a list of feature objects, or 'None'
 
     def fetch_feature_list(self):
         return [feature.ID for feature in self.features.values()]
@@ -861,7 +917,7 @@ if __name__ == "__main__":
         else:
             out_feature = gff_input.feature(search_feature_info)
             if not out_feature:
-                out_feature = gff_input.feature(search_feature_info,strictly_first=False,regex=True)
+                out_feature = gff_input.search_features(search_feature_info,regex=True)
             if not out_feature:
                 raise Exception("Error: Nothing matched by search.")
             if type(out_feature) != list:
