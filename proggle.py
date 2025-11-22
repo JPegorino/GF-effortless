@@ -78,6 +78,7 @@ class GFF_feature:
         elif stat in self.family.all_feature_info:
             output = self.family.all_feature_info[stat]
             if len(output.split(';'))>1:
+                # handles the issue of features in same family with conflicting data for same stat
                 return {feature_ID:feature.feature_info.get(stat) for feature_ID,feature in self.family.unique_features.items()}
             else:
                 return output
@@ -86,7 +87,7 @@ class GFF_feature:
         elif regex:
             pattern = re.compile(r"{}".format(stat))
             matching_attributes = [attribute for attribute in self.family.attributes.keys() if pattern.search(attribute)]
-            return matching_attributes #if len(matching_attributes) > 0 else 'NA'
+            return matching_attributes #if len(matching_attributes) > 0 else default_value
         else:
             return default_value
 
@@ -141,7 +142,7 @@ class GFF_feature:
             return self.raw_entry
         elif bed:
             if type(self.family) == GFF_feature_heirarchy:
-                progenitor = self.family.progenitor_feature
+                progenitor = self.family.progenitor
                 feature_start = str(progenitor.start-1)
                 feature_end = str(progenitor.stop)
             else:
@@ -162,8 +163,7 @@ class GFF_feature:
 class GFF_feature_heirarchy:
     def __init__(self, feature_family):
         self.feature_family = feature_family
-        self.progenitor = self.feature_family[0].ID
-        self.progenitor_feature = self.feature_family[0]
+        self.progenitor = self.feature_family[0]
         self.count = len(self.feature_family)
         self.start = 0
         self.stop = 0
@@ -217,7 +217,7 @@ class GFF_feature_heirarchy:
         self.attributes = {att: ', '.join(sorted(set(stat.split(',')))) for att,stat in self.attributes.items()}
 
     def __str__(self):
-        return self.progenitor # return just the progenitor ID if the heirarchy is printed as string
+        return self.progenitor.ID # return just the progenitor ID if the heirarchy is printed as string
 
 ### Main GFF file object class
 class GFF:
@@ -339,7 +339,7 @@ class GFF:
             family_heirarchy = GFF_feature_heirarchy(family_list)
             self.families[progenitor] = family_heirarchy
             # determine feature indices for progenitors (features in the same family should have matching indices)
-            current_contig_number = family_heirarchy.progenitor_feature.contig_number
+            current_contig_number = family_heirarchy.progenitor.contig_number
             if current_contig_number != last_contig:
                 # using round prevents floating point errors affecting the dictionary keys
                 self.coords[round(current_index+0.000001,6)] = "contig break"
@@ -364,7 +364,7 @@ class GFF:
                     feature.Parent = self.renamed_parents.get(feature.Parent)
                 # Then, create a dictionary of non-existing features to add
                 more_info_to_add = {'index': feature.idx,
-                                    'family': feature.family.progenitor}
+                                    'family': feature.family.progenitor.ID}
                 # Include the ID stat for any entries that were missing one
                 if feature_ID == feature.coords:
                     more_info_to_add[ID_stat] = feature.coords
@@ -418,7 +418,7 @@ class GFF:
              # the code below will attempt retrieval of one or more features with data that matches the lookup, if it is not an ID
             families_with_match = []
             for feature_family in self.families.values():
-                progenitor_feature = self.features.get(feature_family.progenitor)
+                progenitor_feature = self.features.get(feature_family.progenitor.ID)
                 if progenitor_feature.lookup(feature_lookup,regex=regex):
                     families_with_match.append(progenitor_feature)
             if len(families_with_match) < 1:
