@@ -164,7 +164,6 @@ class GFF_feature_heirarchy:
     def __init__(self, feature_family):
         self.feature_family = feature_family
         self.progenitor = self.feature_family[0]
-        self.progenitor_ID = self.progenitor.ID
         self.count = len(self.feature_family)
         self.start = 0
         self.stop = 0
@@ -218,7 +217,7 @@ class GFF_feature_heirarchy:
         self.attributes = {att: ', '.join(sorted(set(stat.split(',')))) for att,stat in self.attributes.items()}
 
     def __str__(self):
-        return self.progenitor_ID # return just the progenitor ID if the heirarchy is printed as string
+        return self.progenitor.ID # return just the progenitor ID if the heirarchy is printed as string
 
 ### Main GFF file object class
 class GFF:
@@ -364,7 +363,7 @@ class GFF:
                     feature.Parent = self.renamed_parents.get(feature.Parent)
                 # Then, create a dictionary of non-existing features to add
                 more_info_to_add = {'index': feature.idx,
-                                    'family': feature.family.progenitor_ID}
+                                    'family': feature.family.progenitor.ID}
                 # Include the ID stat for any entries that were missing one
                 if feature_ID == feature.coords:
                     more_info_to_add[ID_stat] = feature.coords
@@ -406,7 +405,7 @@ class GFF:
             new_contig_name = new_names[current_feature.contig_name]
             current_feature.rename_contig(new_contig_name)
 
-    def feature(self,feature_lookup,family=False,feature_type=None,default_value=None):
+    def feature(self,feature_lookup,as_family=False,feature_type=None,default_value=None):
         if feature_lookup in self.features:
             out_feature = self.features.get(feature_lookup)
         elif feature_lookup in self.indexed_features:
@@ -414,8 +413,8 @@ class GFF:
                 out_feature = self.indexed_features.get(feature_lookup).progenitor
             except: 
                 print(f'Error: index {feature_lookup}')
-                print(f'matches "{self.indexed_features.get(feature_lookup)}"')
-                out_feature = self.indexed_features.get(feature_lookup).progenitor
+                print(f'matches feature family "{self.indexed_features.get(feature_lookup)}"')
+                out_feature = default_value
         else:
             out_feature = default_value
         if isinstance(out_feature, GFF_feature):
@@ -424,12 +423,12 @@ class GFF:
                 out_feature = out_feature.family.unique_features.get(feature_type)
             elif feature_type:
                 print('Warining: no unique {} feature in {} feature heirarchy'.format(feature_type,feature_lookup))
-            if family:
+        if as_family:
                 out_feature = out_feature.family
         return out_feature # returns exactly one feature object, or 'None'
 
     def search_features(self,feature_lookup,just_feature_type=None,regex=False):
-     # the code below will attempt retrieval of one or more features with data that matches the lookup, if it is not an ID
+     # returns a list of features that match a search query (lookup)
         features_with_match = []
         if feature_lookup in self.features:
             out_feature = self.feature(feature_lookup,feature_type=just_feature_type)
@@ -445,7 +444,7 @@ class GFF:
                     features_with_match.append(out_feature)
         else:
             for feature_family in self.families.values():
-                progenitor_feature = self.features.get(feature_family.progenitor_ID)
+                progenitor_feature = self.features.get(feature_family.progenitor.ID)
                 if progenitor_feature.lookup(feature_lookup,regex=regex):
                     features_with_match.append(progenitor_feature)
             features_with_match = features_with_match if len(features_with_match) > 0 else None
@@ -487,6 +486,7 @@ class GFF:
                 ds_feature = self.feature(i,feature_type=feature_type)
                 out_features.append(ds_feature)
         return out_features # returns a list of feature objects, or 'None'
+
 
     def fetch_feature_list(self):
         return [feature.ID for feature in self.features.values()]
