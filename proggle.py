@@ -418,8 +418,9 @@ class GFF:
         else:
             out_feature = default_value
         if isinstance(out_feature, GFF_feature):
-            # the code below allows retreival of data for an alternate feature type in the same family (e.g. CDS info for a gene) if there is only one            if feature_type in out_feature.family.unique_features.keys(): # this only works for 1:1 relationships, e.g. one CDS per gene
-            out_feature = out_feature.family.unique_features.get(feature_type)
+            # the code below allows retreival of data for an alternate feature type in the same family (e.g. CDS info for a gene) if there is only one
+            if feature_type in out_feature.family.unique_features.keys(): # this only works for 1:1 relationships, e.g. one CDS per gene
+                out_feature = out_feature.family.unique_features.get(feature_type)
             elif feature_type:
                 print('Warining: no unique {} feature in {} feature heirarchy'.format(feature_type,feature_lookup))
         if as_family:
@@ -916,7 +917,7 @@ if __name__ == "__main__":
         else:
             out_feature = gff_input.feature(search_feature_info)
             if not out_feature:
-                out_feature = gff_input.feature(search_feature_info,regex=True)
+                out_feature = gff_input.search_features(search_feature_info,regex=True)
             if not out_feature:
                 raise Exception("Error: Nothing matched by search.")
             if type(out_feature) != list:
