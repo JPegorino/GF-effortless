@@ -405,31 +405,87 @@ class GFF:
             new_contig_name = new_names[current_feature.contig_name]
             current_feature.rename_contig(new_contig_name)
 
-    def feature(self,feature_lookup,feature_type=None,strictly_first=True,regex=False):
+    def feature(self,feature_lookup,as_family=False,feature_type=None,default_value=None):
         if feature_lookup in self.features:
             out_feature = self.features.get(feature_lookup)
-             # the code below allows retreival of data for an alternate feature type in the same family (e.g. CDS info for a gene) if there is only one
-            if feature_type in out_feature.family.unique_features.keys(): # this only works for 1:1 relationships, e.g. one CDS per gene
-                out_feature = out_feature.family.unique_features.get(feature_type)
+        elif feature_lookup in self.indexed_features:
+            try:
+                out_feature = self.indexed_features.get(feature_lookup).progenitor
+            except: 
+                print(f'Error: index {feature_lookup}')
+                print(f'matches feature family "{self.indexed_features.get(feature_lookup)}"')
+                out_feature = default_value
+        else:
+            out_feature = default_value
+        if isinstance(out_feature, GFF_feature):
+            # the code below allows retreival of data for an alternate feature type in the same family (e.g. CDS info for a gene) if there is only one            if feature_type in out_feature.family.unique_features.keys(): # this only works for 1:1 relationships, e.g. one CDS per gene
+            out_feature = out_feature.family.unique_features.get(feature_type)
             elif feature_type:
                 print('Warining: no unique {} feature in {} feature heirarchy'.format(feature_type,feature_lookup))
+        if as_family:
+                out_feature = out_feature.family
+        return out_feature # returns exactly one feature object, or 'None'
+
+    def search_features(self,feature_lookup,just_feature_type=None,regex=False):
+     # returns a list of features that match a search query (lookup)
+        features_with_match = []
+        if feature_lookup in self.features:
+            out_feature = self.feature(feature_lookup,feature_type=just_feature_type)
+            features_with_match.append(out_feature)
+        elif feature_lookup in self.indexed_features:
+            out_feature_family = self.feature(feature_lookup)
+            if just_feature_type:
+                for feature_type in out_feature_family.unique_features.keys():
+                    if feature_type.startswith(just_feature_type):
+                        features_with_match.append(out_feature)
+            else:
+                for feature in out_feature_family.family:
+                    features_with_match.append(out_feature)
         else:
-             # the code below will attempt retrieval of one or more features with data that matches the lookup, if it is not an ID
-            families_with_match = []
             for feature_family in self.families.values():
                 progenitor_feature = self.features.get(feature_family.progenitor.ID)
                 if progenitor_feature.lookup(feature_lookup,regex=regex):
-                    families_with_match.append(progenitor_feature)
-            if len(families_with_match) < 1:
-                out_feature = None
-            elif strictly_first or len(families_with_match) == 1:
-                out_feature = families_with_match[0]
-                if len(families_with_match) > 1:
-                    print('Warining: {} feature families with data to match {}, returning first'.format(len(families_with_match),feature_lookup))
-                out_feature = families_with_match
-            else:
-                out_feature = families_with_match
-        return out_feature
+                    features_with_match.append(progenitor_feature)
+            features_with_match = features_with_match if len(features_with_match) > 0 else None
+        return features_with_match # returns a list of feature objects, or 'None'
+
+    def feature_region(self,feature_lookup,feature_type='CDS',us=0,ds=0,in_bp=False,include_self=True):
+        out_features = []
+        current_feature = self.feature(feature_lookup)
+        if not current_feature:
+            raise ValueError(f'input {feature_lookup} must be ID or proggle-formatted index of feature in file.')
+        current_feature_index = current_feature.idx
+        if current_feature.strand == '-':
+            us,ds = ds,us # swap upstream and downstream values if the sequnce is on the - strand
+        if in_bp: # us and ds are distances (bp) upstream/downstream of gene (instead of feature counts)
+            current_contig_length = self.contigs.get(current_feature.contig_name).length
+            us, ds = max(current_feature.start - us, 1), min(current_feature.stop + ds, current_contig_length)
+            current_index, current_start = current_feature.idx, current_feature.start
+            while current_start > us:
+                current_index -= 1
+                us_feature = self.feature(current_index,feature_type=feature_type)
+                current_start = us_feature.start
+            us = current_feature_index - current_index
+            current_index, current_stop = current_feature.idx, current_feature.stop
+            while current_stop < ds:
+                current_index += 1
+                ds_feature = self.feature(current_index,feature_type=feature_type)
+                current_stop = ds_feature.stop
+            ds = current_index - current_feature_index
+        us = current_feature_index - us
+        ds = current_feature_index + ds
+        for i in range(us,current_feature_index):
+            if i in self.indexed_features:
+                us_feature = self.feature(i,feature_type=feature_type)
+                out_features.append(us_feature)
+        if include_self:
+            out_features.append(current_feature)
+        for i in range(current_feature_index+1,ds+1):
+            if i in self.indexed_features:
+                ds_feature = self.feature(i,feature_type=feature_type)
+                out_features.append(ds_feature)
+        return out_features # returns a list of feature objects, or 'None'
+
 
     def fetch_feature_list(self):
         return [feature.ID for feature in self.features.values()]
@@ -860,7 +916,7 @@ if __name__ == "__main__":
         else:
             out_feature = gff_input.feature(search_feature_info)
             if not out_feature:
-                out_feature = gff_input.feature(search_feature_info,strictly_first=False,regex=True)
+                out_feature = gff_input.feature(search_feature_info,regex=True)
             if not out_feature:
                 raise Exception("Error: Nothing matched by search.")
             if type(out_feature) != list:
