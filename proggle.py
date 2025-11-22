@@ -75,8 +75,8 @@ class GFF_feature:
     def lookup(self,stat,regex=True,default_value=None):
         if stat in self.feature_info:
             return self.feature_info[stat]
-        elif stat in self.family.all_feature_info:
-            output = self.family.all_feature_info[stat]
+        elif stat in self.family.related_feature_info:
+            output = self.family.related_feature_info[stat]
             if len(output.split(';'))>1:
                 # handles the issue of features in same family with conflicting data for same stat
                 return {feature_ID:feature.feature_info.get(stat) for feature_ID,feature in self.family.unique_features.items()}
@@ -167,7 +167,7 @@ class GFF_feature_heirarchy:
         self.count = len(self.feature_family)
         self.start = 0
         self.stop = 0
-        self.all_feature_info = {}
+        self.related_feature_info = {}
         self.attributes = {}
         self.feature_tally = {}
         self.unique_features = {}
@@ -200,10 +200,10 @@ class GFF_feature_heirarchy:
         for feature_ID,feature in self.unique_features.items():
             for stat,attribute in feature.feature_info.items():
                 if stat not in ['Parent','ID']:
-                    if stat in self.all_feature_info:
-                        self.all_feature_info.get(stat)[feature_ID]=attribute
+                    if stat in self.related_feature_info:
+                        self.related_feature_info.get(stat)[feature_ID]=attribute
                     else:
-                        self.all_feature_info[stat] = {feature_ID:attribute}
+                        self.related_feature_info[stat] = {feature_ID:attribute}
                     if attribute in self.attributes:
                         self.attributes[attribute] = self.attributes.get(attribute) + ',{}'.format(feature_ID)
                     else:
@@ -213,7 +213,7 @@ class GFF_feature_heirarchy:
         self.stop = max(feature_coordinates)
         # NB: these do not have directionality ('start' means 'first bp', not 'CDS start' or 'gene start')
         # finally, iterate through the extracted stats/attributes one last time to remove duplication
-        self.all_feature_info = { stat: '; '.join(sorted(set(attributes.values()))) for stat,attributes in self.all_feature_info.items()}
+        self.related_feature_info = { stat: '; '.join(sorted(set(attributes.values()))) for stat,attributes in self.related_feature_info.items()}
         self.attributes = {att: ', '.join(sorted(set(stat.split(',')))) for att,stat in self.attributes.items()}
 
     def __str__(self):
@@ -341,9 +341,7 @@ class GFF:
             # determine feature indices for progenitors (features in the same family should have matching indices)
             current_contig_number = family_heirarchy.progenitor.contig_number
             if current_contig_number != last_contig: # start of new contig
-                self.indexed_features[current_index+1] = "contig break"
                 last_contig,last_feature,current_index = (current_contig_number,0,1000000*current_contig_number)
-                self.indexed_features[current_index] = "contig break"
             if family_heirarchy.stop > last_feature:
                 current_index +=1
                 last_feature = family_heirarchy.stop
