@@ -334,21 +334,20 @@ class GFF:
             else:
                 raise KeyError('Error! Parent ID {} not found in file and no "Prev_ID" or equivalent stat for conversion'.format(parent_ID))
         # use the completed dictionary to create and add heirarchy objects to the GFF/feature objects and use these to add feature indices
-        last_contig,current_index=(0,0) # to keep track of index order (helps check order of features in file)
+        last_contig,current_index=(0,1000000-1) # to keep track of index order (helps check order of features in file)
         for progenitor,family_list in self.families.items():
             family_heirarchy = GFF_feature_heirarchy(family_list)
             self.families[progenitor] = family_heirarchy
             # determine feature indices for progenitors (features in the same family should have matching indices)
             current_contig_number = family_heirarchy.progenitor.contig_number
-            if current_contig_number != last_contig:
-                # using round prevents floating point errors affecting the dictionary keys
-                self.coords[round(current_index+0.000001,6)] = "contig break"
-                last_contig,last_feature,current_index = (current_contig_number,0,current_contig_number)
-                self.coords[current_index] = "contig break"
+            if current_contig_number != last_contig: # start of new contig
+                self.indexed_features[current_index+1] = "contig break"
+                last_contig,last_feature,current_index = (current_contig_number,0,1000000*current_contig_number)
+                self.indexed_features[current_index] = "contig break"
             if family_heirarchy.stop > last_feature:
-                current_index = round(current_index+0.000001,6)
+                current_index +=1
                 last_feature = family_heirarchy.stop
-                self.coords[current_index] = family_heirarchy
+                self.indexed_features[current_index] = family_heirarchy
             elif family_heirarchy.stop < last_feature:
                 print('Warning! Feature order in file does not match ordering on contig. Indices will be invalid.\n'.format(parent_ID))
             # add heirarchy objects and indices to all features
