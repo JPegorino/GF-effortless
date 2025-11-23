@@ -448,41 +448,41 @@ class GFF:
             features_with_match = features_with_match if len(features_with_match) > 0 else None
         return features_with_match # returns a list of feature objects, or 'None'
 
-    def feature_region(self,feature_lookup,feature_type='CDS',us=0,ds=0,in_bp=False,include_self=True):
+    def feature_region(self,feature_lookup,feature_type='CDS',bf=0,af=0,in_bp=False,include_self=True):
         out_features = []
         current_feature = self.feature(feature_lookup)
         if not current_feature:
             raise ValueError(f'input {feature_lookup} must be ID or proggle-formatted index of feature in file.')
         current_feature_index = current_feature.idx
         if current_feature.strand == '-':
-            us,ds = ds,us # swap upstream and downstream values if the sequnce is on the - strand
-        if in_bp: # us and ds are distances (bp) upstream/downstream of gene (instead of feature counts)
+            bf,af = af,bf # swap upstream and downstream values if the sequnce is on the - strand
+        if in_bp: # bf and af are distances (bp) upstream/downstream of gene (instead of feature counts)
             current_contig_length = self.contigs.get(current_feature.contig_name).length
-            us, ds = max(current_feature.start - us, 1), min(current_feature.stop + ds, current_contig_length)
+            bf, af = max(current_feature.start - bf, 1), min(current_feature.stop + af, current_contig_length)
             current_index, current_start = current_feature.idx, current_feature.start
-            while current_start > us:
+            while current_start > bf:
                 current_index -= 1
-                us_feature = self.feature(current_index,feature_type=feature_type)
-                current_start = us_feature.start
-            us = current_feature_index - current_index
+                bf_feature = self.feature(current_index,feature_type=feature_type)
+                current_start = bf_feature.start
+            bf = current_feature_index - current_index
             current_index, current_stop = current_feature.idx, current_feature.stop
-            while current_stop < ds:
+            while current_stop < af:
                 current_index += 1
-                ds_feature = self.feature(current_index,feature_type=feature_type)
-                current_stop = ds_feature.stop
-            ds = current_index - current_feature_index
-        us = current_feature_index - us
-        ds = current_feature_index + ds
-        for i in range(us,current_feature_index):
+                af_feature = self.feature(current_index,feature_type=feature_type)
+                current_stop = af_feature.stop
+            af = current_index - current_feature_index
+        bf = current_feature_index - bf
+        af = current_feature_index + af
+        for i in range(bf,current_feature_index):
             if i in self.indexed_features:
-                us_feature = self.feature(i,feature_type=feature_type)
-                out_features.append(us_feature)
+                bf_feature = self.feature(i,feature_type=feature_type)
+                out_features.append(bf_feature)
         if include_self:
             out_features.append(current_feature)
-        for i in range(current_feature_index+1,ds+1):
+        for i in range(current_feature_index+1,af+1):
             if i in self.indexed_features:
-                ds_feature = self.feature(i,feature_type=feature_type)
-                out_features.append(ds_feature)
+                af_feature = self.feature(i,feature_type=feature_type)
+                out_features.append(af_feature)
         return out_features # returns a list of feature objects, or 'None'
 
 
@@ -699,6 +699,13 @@ if __name__ == "__main__":
         parser.add_argument("-s", "--search",
             default=None,
             help="Search criteria to extract a subset of features from the input file.")
+        parser.add_argument("-c", "--contig_region",
+            default=None,
+            nargs="+",
+            help="Secifications for contig sub-region extraction?\n\
+            Must be 1-3 ' ' delimited strings in the format 'Method' 'Start' 'Stop'.\n\
+            Method must be a single letter or digit from 0-9 (See README.txt).\n\
+            Columns (optional) must be start and stop co-ordinates following method.")
         parser.add_argument("-d", "--output_delimiter",
             default="\t",
             help="Output delimiter.")
@@ -834,6 +841,7 @@ if __name__ == "__main__":
     out_file = args.output_file_name
     overwrite = args.overwrite
     search_feature_info = args.search
+    contig_region_search = args.contig_region
     out_delimiter = args.output_delimiter
     fasta_header = args.fasta_header
     feature_analysis_data = args.add_data
@@ -851,6 +859,29 @@ if __name__ == "__main__":
         split_every = int(args.fasta_split_every)
     except:
         raise TypeError("split_every, upstream and downstream values must be numeric integers")
+    # parse contig sub-region extraction details from contig_region input parameter
+    if contig_region_search:
+        contig_region_method_defaults:{
+            'B':(5,0), 'b':(5,0), 'A':(0,5), 'a':(0,5), 
+            'U':(us,0), 'u':(us,0), 'D':(0,ds), 'd':(0,ds),
+            'n':(0,1), 'p':(1,0), 'F':(7,7), 'f':(7,7)
+        }
+        if len(contig_region_search[0]) > 1:
+            contig_region = contig_region_search[0][0] # Extract first character only
+        if contig_region not in list('AaBbUuDdNnPpFf'): # convert to a dictionary of methods
+            raise ValueError("{} information is not recorded for gff features.".format(filtering[0]))
+        if contig_region_search[1]:
+            try:
+                r_low = int(contig_region_search[1])
+            except:
+                raise TypeError(f'Cannot determine contig region: {r_low} is not a numeric integer.')
+            if contig_region_search[2]:
+                try:
+                    r_high = int(contig_region_search[2])
+                except:
+                    raise TypeError(f'Cannot determine contig region: {r_low} and {r_high} are not numeric integers.')
+            else:
+                r_high = r_low # if there's only a single value, assume it's for both
     # parse filtering information from filtering input parameter
     if filtering:
         if not filtering[0] in gff_input.all_recorded_stats:
@@ -859,8 +890,6 @@ if __name__ == "__main__":
             raise ValueError("Operation must be one of ['==', '!=', '>=', or '<=']".format(filtering[2]))
         if not type(filtering[2]) == int:
             raise TypeError("{} is not a numeric integer".format(filtering[2]))
-    else:
-        filtering = []
     # parse data from filtering 'add feature data' parameter
     if feature_analysis_data:
         analysis_types = ['general', 'pangenome', 'blast_subject']
@@ -907,26 +936,58 @@ if __name__ == "__main__":
 
     # conduct a single search if the search parameter was set - can then end script early
     if search_feature_info:
-        if out_format in ('contig','region') and search_feature_info in gff_input.contigs:
-            out_region = gff_input.contigs.get(search_feature_info)
-            new_header = fasta_header if fasta_header not in gff_input.all_recorded_stats else None
-            write_region(out_region,out_format,rstart=us,rstop=ds,output_file=out_file,rename_in_fasta=new_header,fasta_split=split_every)
-            sys.exit(0)
+        numbered_contigs = [i for i in range(1,gff_input.contig_count)]
+        if search_feature_info in gff_input.contigs and search_feature_info not in numbered_contigs:
+            # add all the other contigs to the filter_contigs[] so output is only for the searched contig
+            for contig_name_or_number in gff_input.contigs:
+                if contig_name_or_number != search_feature_info:
+                    filter_contigs.append(contig_name_or_number)
+            if out_format in ['fa','fna']:
+                out_region = gff_input.contigs.get(search_feature_info)
+                new_header = fasta_header if fasta_header not in gff_input.all_recorded_stats else None
+                write_region(out_region,out_format,rstart=r_low,rstop=r_high,output_file=out_file,rename_in_fasta=new_header,fasta_split=split_every)
+                sys.exit(0)
+            else:
+                found_features = [feature.ID for feature in out_dict.values() if feature.contig_name == search_feature_info]
         else:
-            out_feature = gff_input.feature(search_feature_info)
-            if not out_feature:
-                out_feature = gff_input.search_features(search_feature_info,regex=True)
-            if not out_feature:
+            found_features = gff_input.feature(search_feature_info)
+            if not found_features:
+                found_features = gff_input.search_features(search_feature_info,regex=True)
+            if not found_features:
                 raise Exception("Error: Nothing matched by search.")
-            if type(out_feature) != list:
-                out_feature = [out_feature]
+            if type(found_features) != list:
+                found_features = [found_features]
             if out_file:
                 out_file = open(out_file,'a') if out_file else None
-            for feature in out_feature:
+            for feature in found_features:
                 write_feature(feature,out_format,output_file=out_file,fasta_split=split_every)
             if out_file:
                 out_file.close()
             sys.exit(0)
+    
+    if contig_region and contig_region in list('NnPpUuDdFfBbAa'):
+        if not r_high:
+            r_low, r_high = contig_region_method_defaults.get(contig_region) # search for defaults BACKHERE
+        r_in_bp = True if max(r_low,r_high) > 500 else False
+        r_ftype = 'CDS' if contig_region.upper() == contig_region else None
+        r_self = True if contig_region in list('NnPp') else False
+        r_stranded = True if contig_region in list('UuDd') else False
+        if not found_features:
+            raise Exception(f'No features in file match search criteria "{search_feature_info}". Cannot extract surrounding region.')
+        if len(found_features) != 1:
+            raise Exception(f'Search for {search_feature_info} matches multiple features. Can only extract region surrounding a single feature:')
+            print(', '.join(found_features))
+        found_features = gff_input.feature_region(found_features.ID,feature_type=r_ftype,bf=r_low,af=r_high,in_bp=r_in_bp,strand_aware=r_stranded,include_self=r_self)
+        if contig_region in gff_input.features or contig_region in gff_input.indexed_features:
+            second_search_feature = gff_input.feature(contig_region)
+            if not second_search_feature:
+                raise Exception(f'Error: No features in file matching {contig_region}.')
+            assert search_feature.contig_number == second_search_feature.contig_number, 'Error, search features must be on the same contig.'
+            search_start = min(found_features.start,second_search_feature.start)
+            search_stop = max(found_features.stop,second_search_feature.stop)
+            out_region = gff_input.feature_region(found_features.ID,feature_type='CDS',us=search_start,ds=search_stop,in_bp=True,include_self=True)
+        if not out_format:
+            out_format = 'ffn' # returns nucleotide sequences by default
 
     if out_format == 'fa' or out_format == 'fna':
         with open(out_file,'a') as outfile:
