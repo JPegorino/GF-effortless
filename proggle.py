@@ -614,19 +614,18 @@ if __name__ == "__main__":
       # PROGGLE main script functions
     def parse_args():
         parser = argparse.ArgumentParser(
-            description="Quickly edit GFF files, add and search for features, or extract feature and sequence data in various formats.",
+            description="Quickly edit GFF files, search features, and add or extract feature/sequence data in various formats.",
             formatter_class=ProggleHelpFormatter)
         parser.add_argument("gff_input",
             help="Path to your GFF file to search or edit.")
         parser.add_argument("-o", "--output_file_name",
-            help="Output file name.\nDefault: 'None (print to screen) if search, overwrite or convert (infer extension).' ",
+            help="Output file path.\nDefault: 'None (print to screen) or replace extension (see -f).' ",
             default=None)
         parser.add_argument("-f", "--output_format",
             default=None,
             help="Output format. Used as new file stem extension with overwrite. Must be one of:\n\
             none (default): The ID stat for each feature\n\
             coords: tab delimited ID, contig no., start and end of each feature\n\
-            features: description\n\
             number: description\n\
             index: A unique index assigned to each\n\
             bed: bed format\n\
@@ -635,13 +634,12 @@ if __name__ == "__main__":
             subset: feature statistics\n\
             tab | table: tabular format, delimited by tab characters\n\
             subtab | subset_table: tabular format, delimited by tab characters\n\
-            fa | fna: feature contig sequences in multi-FASTA format\n\
+            fa | fna: contig/scaffold nucleotide sequences in multi-FASTA format\n\
             fasta | ffn: feature nucleotide sequences in multi-FASTA format\n\
-            protein | faa: feature protein sequences in multi-FASTA format\n\
-            contig | region: description")
+            protein | faa: feature protein sequences in multi-FASTA format")
         parser.add_argument("-s", "--search",
             default=None,
-            help="Search criteria to extract a subset of features from the input file.")
+            help="Feature search term.")
         parser.add_argument("-d", "--output_delimiter",
             default="\t",
             help="Output delimiter.")
@@ -662,7 +660,7 @@ if __name__ == "__main__":
             help="Calculate additional statistics for feature entries?\nDefault: 'False'")
         parser.add_argument("-m", "--metadata",
             default=None,
-            help="Path to corresponding genome/organism metadata file.\nDefault: 'False'")
+            help="Path to corresponding genome metadata file.\nDefault: 'False'")
         parser.add_argument("-a", "--add_data",
             default=None,
             nargs="+",
@@ -679,12 +677,12 @@ if __name__ == "__main__":
             default=False,
             help="Customise how contigs are renamed in output.\n\
             Default: Retain input contig names in output files.\n\
-            Input: 'n','number', or '#', appends contig no. to existing names (if absent).\n\
-            Input: 'STRING', appends contig no. to string provided.\n\
-            No Input: appends contig no. to input file name (excluding extension).")
+            Input: 'n/number/#', append contig # to existing names (if absent).\n\
+            Input: 'NEW_NAME', appends contig # to NEW_NAME provided.\n\
+            No Input: appends contig # to input file name (excluding extension).")
         parser.add_argument("-sf", "--sequence_file",
             default=None,
-            help="Path to corresponding FASTA sequence file, if they are not in the GFF file.\nDefault: 'input file name with fasta/fna/fa extension.'")
+            help="Path to corresponding FASTA sequence file, (if not in GFF file).\nDefault: 'input file path with fasta/fna/fa extension.'")
         parser.add_argument("-ID", "--ID_stat",
             default='ID',
             help="Unique identifer statistic for features in the GFF file.\nDefault: 'ID'")
