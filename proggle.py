@@ -676,7 +676,7 @@ if __name__ == "__main__":
         parser.add_argument("gff_input",
             help="Path to your GFF file to search or edit.")
         parser.add_argument("-o", "--output_file_name",
-            help="Output file path.\nDefault: 'None (print to screen) or replace extension (see -f).' ",
+            help="Output file path.\nDefault: 'None (print to screen) or input file stem with new extension (see -f).' ",
             default=None)
         parser.add_argument("-f", "--output_format",
             default=None,
@@ -969,7 +969,7 @@ if __name__ == "__main__":
             if type(found_features) != list:
                 found_features = [found_features]
         # parse and apply contig_region specs
-        if contig_region and contig_region in list('NnPpUuDdFfBbAa'):
+        if contig_region_search and contig_region in list('NnPpUuDdFfBbAa'):
             if not found_features:
                 raise Exception(f'No features in file match search criteria "{search_feature_info}". Cannot extract surrounding region.')
             if len(found_features) != 1:
