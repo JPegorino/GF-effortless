@@ -948,9 +948,10 @@ if __name__ == "__main__":
             print("Warning: Could not add genome metadata.")
     if feature_analysis_data:
         gff_input.add_feature_data(feature_analysis_data[0],analysis_type=feature_analysis_data[1],only_extract_columns=feature_analysis_data[2],pad_missing=True)
-
-    # use specified parameters to determine output file name
-    if not out_file and not search_feature_info: # search mode has no output file when printing to screen
+    
+    # generate output file name
+    if not out_file and not search_feature_info:
+        # use input name if none specified (default)
         out_format = out_format if out_format else '.gff'
         out_format_ext = out_format + '.txt' if out_format in gff_input.all_recorded_stats else out_format
         out_file = os.path.splitext(args.gff_input)[0] + '.' + out_format_ext # use input name if none specified (default)
@@ -969,6 +970,24 @@ if __name__ == "__main__":
             # if the output file exists, the script must be in overwrite mode to overwrite
             if not overwrite:
                 raise RuntimeError("Output file name '{}' matches existing file. Use '-x' to force overwrite. Exiting...".format(out_file))
+
+    # parse contig filtering information
+    if filter_contigs:
+        if re.search('^[0-9]*[-+]$',filter_contigs):
+            filter_contigs_as_int = int(filter_contigs.rstrip('-').rstrip('+'))
+            if filter_contigs.endswith('-'):
+                filtered_contig_list = [ID for ID,contig in gff_input.contigs.items() if contig.length <= filter_contigs_as_int]
+            else:
+                filtered_contig_list = [ID for ID,contig in gff_input.contigs.items() if contig.length >= filter_contigs_as_int]
+        else:
+            filtered_contig_list = filter_contigs.lstrip(';').split(';')
+            if not filter_contigs.startswith(';'):
+                filtered_contig_list = [contig for contig in gff_input.contigs if str(contig) not in filtered_contig_list]
+    else:
+        filtered_contig_list = []
+    # gff_input.contigs = {contig_ID:contig for contig in gff_input.contigs if contig_ID not in filtered_contig_list}
+    # gff_input.features = {feature_ID:contig for contig in gff_input.features if feature.contig_name not in filtered_contig_list}
+    # gff_input.features = {feature_ID:contig for contig in gff_input.features if feature.contig_number not in filtered_contig_list}
 
     # conduct a single search if the search parameter was set - can then end script early
     if search_feature_info:
@@ -1036,14 +1055,14 @@ if __name__ == "__main__":
         with open(out_file,'a') as outfile:
             for i in range(1,gff_input.contig_count+1):
                 current_contig = gff_input.contigs.get(i)
-                if current_contig.name in filter_contigs or current_contig.number in filter_contigs:
+                if current_contig.name in filtered_contig_list or current_contig.number in filtered_contig_list:
                     continue
                 outfile.write(current_contig.print_sequence(reverse_strand=False,split_every=split_every,region=False,rename=False)+'\n')
     elif not out_format or out_format == 'gff':
         gff_input.to_newfile(out_file=out_file,
             rename_contigs=False,update_stats=update_gff_stats,
             add_FASTA_sequence=without_fasta,FASTA_Split_Every=split_every,
-            skip_entries=filtering,skip_contigs=filter_contigs)
+            skip_entries=filtering,skip_contigs=filtered_contig_list)
     elif out_format in ['subset', 'subset_table', 'subtab', 'features']:
         raise ValueError("out_format {} cannot be applied.".format(out_format))
     elif out_format in ['index','number','coords','ffn','fasta','stats','protein','faa','bed','tab','table']:
