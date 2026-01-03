@@ -783,13 +783,6 @@ if __name__ == "__main__":
         parser.add_argument("-ID", "--ID_stat",
             default='ID',
             help="Unique identifer statistic for features in the GFF file.\nDefault: 'ID'")
-        parser.add_argument("-fc", "--filter_contigs",
-            default=[],
-            help="Name of Specific Contig or scaffold to search or return.\n\
-            Names of multiple contigs can be provided as a python list.\n\
-            Input preceeded by the '-' character will instead be excluded.\n\
-            Numeric integers will be treated as a max. or min. ('-') length threshold.\n\
-            Default 'None'")
         parser.add_argument("-ff", "--filter_features",
             default=[],
             nargs="+",
