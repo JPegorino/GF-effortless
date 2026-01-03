@@ -714,28 +714,28 @@ if __name__ == "__main__":
             fa | fna: contig/scaffold nucleotide sequences in multi-FASTA format\n\
             fasta | ffn: feature nucleotide sequences in multi-FASTA format\n\
             protein | faa: feature protein sequences in multi-FASTA format")
-        parser.add_argument("-c", "--contigs",
-            default=None,
-            nargs="+",
-            help="Name or # of contig/scaffolds to search or extract from.\n\
-            Must be 1-3 ' ' delimited strings in the format 'Contigs' 'Start' 'Stop'.\n\
-            'Contigs' must be a ';'-delimited string of contigs names (see README.txt).\n\
-            Strings starting ';' are interpreted as lists of contigs to exclude.\n\
-            Single numeric integers ± (e.g 200+) are read as min/max. length thresholds (bp).\n\
-            'Start' and 'Stop' must be numeric integer coodrinates of sub-regions to extract.\n\
-            Negative 'Stop' values are read as X-bp from end pos.\n\
-            Start without Stop is read as 'X-bp from each end'.\n\
-            Default 'None'")
         parser.add_argument("-s", "--search",
             default=None,
             help="Feature search term.")
-        parser.add_argument("-n", "--nearby", "--neighborhood"
+        parser.add_argument("-c", "--contigs",
             default=None,
             nargs="+",
-            help="Include nearby syntenic features in output\n\
-            Must be 1-3 ' ' delimited strings in the format 'Method' '#_prev' '#_post'.\n\
-            Method must be a single letter or digit from 0-9 (see README.txt).\n\
-            #_prev/post (optional) specify the # features to include (see README.txt).")
+            help="Name or # of contig/scaffolds to search or extract (see README.txt).\n\
+            Takes 1-3 ' '-delimited strings in the format 'Contigs' 'Start' 'Stop'.\n\
+            'Contigs' takes a ';'-delimited string of contigs names.\n\
+            A string starting ';' is read as contigs to exclude.\n\
+            Integers± (e.g 200+) are read as min/max. length limits (bp).\n\
+            'Start'/'Stop' (optional) take integer coords of sub-regions to extract.\n\
+            Negative 'Stop' values are read as X-bp from end pos.\n\
+            Start without Stop is read as 'X-bp from each end'.\n\
+            Default 'None'")
+        parser.add_argument("-n", "--nearby", "--neighborhood",
+            default=None,
+            nargs="+",
+            help="Include nearby syntenic features in search output\n\
+            Takes 1-3 ' '-delimited strings in the format 'Method' '#1' '#2'.\n\
+            Method takes a single letter or digit from 0-9 (see README.txt).\n\
+            #1/#2 (optional) specify the # ±flanking features to include.")
         parser.add_argument("-d", "--output_delimiter",
             default="\t",
             help="Output delimiter.")
@@ -761,9 +761,9 @@ if __name__ == "__main__":
             default=None,
             nargs="+",
             help="Add new feature data from tabular input file?\n\
-            Must be 2-3 ' ' delimited strings in the format 'File_path' 'Analysis-type' 'Columns'.\n\
-            Analysis-type must be one of 'general', 'pangenome' or 'blast_subject'.\n\
-            Columns (optional) must be a ','-delimited string of column # ranges, e.g.'1;3;5-8;11'.")
+            Takes 2-3 ' ' delimited strings in the format 'File_path' 'Analysis-type' 'Columns'.\n\
+            Analysis-type takes one of 'general', 'pangenome' or 'blast_subject'.\n\
+            Columns (optional) takes a ','-delimited string of column # ranges, e.g.'1;3;5-8;11'.")
         parser.add_argument("-x", "-ow", "--overwrite",
             action="store_true",
             help="Allow overwriting if named output file exists?\nDefault: 'False'")
@@ -787,11 +787,11 @@ if __name__ == "__main__":
             Numeric integers will be treated as a max. or min. ('-') length threshold.\n\
             Default 'None'")
         parser.add_argument("-ff", "--filter_features",
-            default=None,
+            default=[],
             nargs="+",
             type=str,
             help="Arithmetic operation to filter features.\n\
-            Must be 3 ' ' delimited strings in the format 'stat' 'operation' 'value'.\n\
+            Takes 3 ' ' delimited strings in the format 'stat' 'operation' 'value'.\n\
             Operation must be one of '==', '!=', '>=', or '<='.")
         parser.add_argument("-wf", "--without_fasta",
             action="store_false",
@@ -807,6 +807,8 @@ if __name__ == "__main__":
             else:
                 print(string)
         out_contig = gff_input.contigs.get(out_region)
+        print(rstart)
+        print(rstop)
         use_region = (rstart,rstop) if (rstop + rstart) != 0 else False
         out_sequence = out_region.print_sequence(reverse_strand=(rstart>rstop),split_every=fasta_split,region=use_region,rename=rename_in_fasta)
         return_string(out_sequence)
@@ -845,21 +847,10 @@ if __name__ == "__main__":
             stat_subset = {key:my_out.feature_info.get(key) for key in fasta_header.split(';') if key in my_out.feature_info}
             return_string(f'{out_delimiter}'.join(key for key in stat_subset.keys()))
             return_string(f'{out_delimiter}'.join([str(val) for val in stat_subset.values()]))
-        elif out_format == 'fasta' or out_format == 'ffn':
+        elif out_format == 'fasta' or out_format == 'ffn' or out_format == 'fa' or out_format == 'fna':
             return_string(my_out.print_sequence(gff_input.contigs.get(my_out.contig_name),split_every=fasta_split,fasta_name_stats=fasta_header.split(';'),us=us,ds=ds))
         elif out_format == 'protein' or out_format == 'faa':
             return_string(my_out.print_sequence(gff_input.contigs.get(my_out.contig_name),fasta_header.split(';'),split_every=fasta_split,us=us,ds=ds,protein=True))
-        elif out_format == 'fa' or out_format == 'fna':
-            out_contig = gff_input.contigs.get(my_out.contig_name)
-            new_header = fasta_header if fasta_header not in my_out.feature_info else out_contig.name
-            reverse_strand = my_out.strand == '-'
-            if (us + ds) == 0:
-                rstart, rstop = 1, out_contig.length
-            else:
-                rstart, rstop = ds, us
-            if reverse_strand:
-                rstart, rstop = rstop, rstart
-            write_region(out_contig,out_format,rstart=rstart,rstop=rstop,output_file=out_file,rename_in_fasta=new_header,fasta_split=split_every)
         elif out_format in my_out.feature_info:
             return_string(my_out.feature_info.get(out_format))
         else:
@@ -881,16 +872,20 @@ if __name__ == "__main__":
     corresponding_fasta = args.sequence_file
     feature_ID_stat = args.ID_stat
     rename_contigs = args.rename_contigs
-    filter_contigs = args.contigs[0]
+    contig_parameters = args.contigs
     filtering = args.filter_features
     without_fasta = args.without_fasta
-    # parse contig start and stop info
-    rstart,rstop = (args.contigs[1],args.contigs[-1]) if len(args.contigs) > 1 else (0,0)
+    rstart,rstop = (0,0) # set rstart and rstop to 0 without contig parameters
+    # parse contig parameters
+    if contig_parameters:
+        filter_contigs = contig_parameters[0]
+        rstart,rstop = (contig_parameters[1],contig_parameters[-1]) if len(contig_parameters) > 1 else (0,0)
     # parse integers
     try:
         us = int(args.upstream)
         ds = int(args.downstream)
-        rstart,rstop = (int(rstart),int(rstart))
+        if contig_parameters:
+            rstart,rstop = (int(rstart),int(rstart))
         split_every = int(args.fasta_split_every)
     except:
         raise TypeError("split_every, up/downstream and conting start/stop values can only be numeric integers.")
@@ -899,7 +894,8 @@ if __name__ == "__main__":
         synteny_method_defaults = {
             'B':(5,0), 'b':(5,0), '-':(5,0), 'A':(0,5), 'a':(0,5), '+':(0,5),  
             'U':(us,0), 'u':(us,0), '_':(us,0), 'D':(0,ds), 'd':(0,ds), '=':(0,ds),
-            'n':(0,1), 'p':(1,0), 'F':(7,7), 'f':(7,7), 'S':(7,7), 's':(7,7), '~':(7,7),
+            'n':(0,1), 'p':(1,0), 'N':(0,1), 'P':(1,0), 
+            'F':(7,7), 'f':(7,7), 'S':(7,7), 's':(7,7), '~':(7,7)
         }
         synteny_method = include_nearby_features[0][0] # Extract first character only
         # I could add a clause for 'if output_format in ['fa', 'fna'] here!?
@@ -987,8 +983,8 @@ if __name__ == "__main__":
             if not overwrite:
                 raise RuntimeError("Output file name '{}' matches existing file. Use '-x' to force overwrite. Exiting...".format(out_file))
 
-    # parse contig filtering information
-    if filter_contigs:
+    # perform contig filtering
+    if contig_parameters:
         if re.search('^[0-9]*[-+]$',filter_contigs):
             filter_contigs_as_int = int(filter_contigs.rstrip('-').rstrip('+'))
             if filter_contigs.endswith('-'):
@@ -1020,11 +1016,11 @@ if __name__ == "__main__":
         # format the search result as a list - important for downstream output processing
         if type(found_features) != list:
             found_features = [found_features]
+        remember_strand = found_features[0].strand
         # parse and apply synteny_method specs - uses found features list extracted above
         if include_nearby_features:
             if len(found_features) != 1:
                 raise Exception(f'Search for {search_feature_info} matches multiple features. Can only extract region surrounding a single feature:')
-                remember_strand = found_features[0].strand
             found_features = gff_input.feature_region(found_features[0].ID,feature_type=n_ftype,bf=n_low,af=n_high,in_bp=n_in_bp,strand_aware=n_stranded,include_self=n_self)
             if synteny_method in list('PpNn'):
                 found_features = [found_features[0]]
@@ -1034,14 +1030,16 @@ if __name__ == "__main__":
         if out_file:
             out_file = open(out_file,'a')
         if out_format in ['fa','fna']:
-            n_contig = found_features[0].contig_name
-            out_region_low = min(found_features[0].coords.split('~')[1:]),
+            contig_with_nearby_features = found_features[0].contig_name
+            n_contig = gff_input.contigs.get(contig_with_nearby_features)
+            out_region_low = min(found_features[0].coords.split('~')[1:])
             out_region_high = max(found_features[-1].coords.split('~')[1:])
-            out_region_low, out_region_high = out_region_high, out_region_low if remember_strand == '-' else out_region_low, out_region_high
-            print([found_features[0].ID,r_contig,str(out_region_low),str(out_region_high)])
+            print([found_features,str(out_region_low),str(out_region_high)])
+            out_region_low,out_region_high = (out_region_high,out_region_low) if remember_strand == '-' else (out_region_low,out_region_high)
+            print([found_features[0].ID,n_contig,str(out_region_low),str(out_region_high)])
             out_region_tofasta = gff_input.contigs.get(n_contig)
             new_header = fasta_header if fasta_header not in gff_input.all_recorded_stats else None
-            write_region(r_contig,out_format,rstart=out_region_low,rstop=out_region_high,output_file=out_file,rename_in_fasta=new_header,fasta_split=split_every)
+            write_region(n_contig,out_format,rstart=out_region_low,rstop=out_region_high,output_file=out_file,rename_in_fasta=new_header,fasta_split=split_every)
         else:
             for feature in found_features:
                 write_feature(feature,out_format,output_file=out_file,fasta_split=split_every)
@@ -1057,7 +1055,7 @@ if __name__ == "__main__":
                     continue
                 if rstop == 0:
                     rstop = current_contig.length 
-                if str(rstop).startswith('-'):
+                if str(rstop).startswith('-') or rstart == rstop:
                     rstop = current_contig.length + rstop
                 outfile.write(current_contig.print_sequence(reverse_strand=False,split_every=split_every,region=(rstart,rstop),rename=False)+'\n')
     elif not out_format or out_format == 'gff':
@@ -1070,7 +1068,7 @@ if __name__ == "__main__":
     elif out_format in ['index','number','coords','ffn','fasta','stats','protein','faa','bed','tab','table']:
         with open(out_file,'a') as outfile:
             for feature in gff_input.features.values():
-                if feature.contig_name in filter_contigs or feature.contig_number in filter_contigs:
+                if feature.contig_name in filtered_contig_list or feature.contig_number in filtered_contig_list:
                     continue
                 if feature.seq_type != 'CDS' or feature.ID in filtering:
                     continue
