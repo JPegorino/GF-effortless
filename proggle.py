@@ -481,12 +481,16 @@ class GFF:
             while current_start > bf:
                 current_index -= 1
                 bf_feature = self.feature(current_index,feature_type=feature_type)
+                if not bf_feature:
+                    break
                 current_start = bf_feature.start
             bf = current_feature_index - current_index
             current_index, current_stop = current_feature.idx, current_feature.stop
             while current_stop < af:
                 current_index += 1
                 af_feature = self.feature(current_index,feature_type=feature_type)
+                if not af_feature:
+                    break
                 current_stop = af_feature.stop
             af = current_index - current_feature_index
         bf = current_feature_index - bf
@@ -1032,11 +1036,11 @@ if __name__ == "__main__":
         if out_format in ['fa','fna']:
             contig_with_nearby_features = found_features[0].contig_name
             n_contig = gff_input.contigs.get(contig_with_nearby_features)
-            out_region_low = min(found_features[0].coords.split('~')[1:])
-            out_region_high = max(found_features[-1].coords.split('~')[1:])
-            print([found_features,str(out_region_low),str(out_region_high)])
+            out_region_low = min(map(int, found_features[0].coords.split('~')[1:]))
+            out_region_high = max(map(int, found_features[-1].coords.split('~')[1:]))
             out_region_low,out_region_high = (out_region_high,out_region_low) if remember_strand == '-' else (out_region_low,out_region_high)
-            print([found_features[0].ID,n_contig,str(out_region_low),str(out_region_high)])
+            # print([found_features,str(out_region_low),str(out_region_high)])
+            # print([found_features[0].ID,n_contig,str(out_region_low),str(out_region_high)])
             out_region_tofasta = gff_input.contigs.get(n_contig)
             new_header = fasta_header if fasta_header not in gff_input.all_recorded_stats else None
             write_region(n_contig,out_format,rstart=out_region_low,rstop=out_region_high,output_file=out_file,rename_in_fasta=new_header,fasta_split=split_every)
@@ -1053,11 +1057,12 @@ if __name__ == "__main__":
                 current_contig = gff_input.contigs.get(i)
                 if current_contig.name in filtered_contig_list or current_contig.number in filtered_contig_list:
                     continue
-                if rstop == 0:
-                    rstop = current_contig.length 
-                if str(rstop).startswith('-') or rstart == rstop:
-                    rstop = current_contig.length + rstop
-                outfile.write(current_contig.print_sequence(reverse_strand=False,split_every=split_every,region=(rstart,rstop),rename=False)+'\n')
+                # if rstop == 0:
+                #     rstop = current_contig.length 
+                # if str(rstop).startswith('-') or rstart == rstop:
+                #     rstop = current_contig.length + rstop
+                # print(rstart,rstop)
+                outfile.write(current_contig.print_sequence(reverse_strand=False,split_every=split_every,region=False,rename=False)+'\n')
     elif not out_format or out_format == 'gff':
         gff_input.to_newfile(out_file=out_file,
             rename_contigs=False,update_stats=update_gff_stats,
