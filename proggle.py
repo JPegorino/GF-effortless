@@ -1005,10 +1005,6 @@ if __name__ == "__main__":
     # gff_input.features = {feature_ID:contig for contig in gff_input.features if feature.contig_name not in filtered_contig_list}
     # gff_input.features = {feature_ID:contig for contig in gff_input.features if feature.contig_number not in filtered_contig_list}
 
-#############################
-### PROGGLE SEARCH OPTION ###
-#############################
-
     # conduct a single search if the search parameter was set - can then end script early
     if search_feature_info:
         # conduct the search
