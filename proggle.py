@@ -44,7 +44,7 @@ class contig:
 
 ### GFF feature object class
 class GFF_feature:
-    def __init__(self, entry, contig_number, ID_stat='ID', alt_ID_stat=False):
+    def __init__(self, entry, contig_number, ID_stat='ID', alt_ID_stat='locus_tag'):
         self.raw_entry = entry
         self.feature = entry.split('\t')
         self.contig_name = self.feature[0]
@@ -59,7 +59,8 @@ class GFF_feature:
         elif alt_ID_stat and alt_ID_stat in self.feature_info.keys():
             self.ID = self.feature_info[alt_ID_stat]
         else:
-            print('\nWarning: no {} stat or specified alternative for feature:\n{}\nGenerating ID from co-ordinates...'.format(ID_stat,entry))
+            if verbose:
+                warnings.warn('No {} stat or alternative for {} feature. Generating from loci ({})...'.format(ID_stat,self.seq_type,self.coords))
             self.ID = self.coords
         self.idx = 0
         self.Parent = self.feature_info.get('Parent') if 'Parent' in self.feature_info else self.ID
@@ -281,7 +282,7 @@ class GFF:
                         self.feature_type_dict[current_feature.seq_type] += 1
                     # add new stats from current feature to dictionary
                     if current_feature.ID in self.features:
-                        print('Warning: {} file contains multiple entries with ID {}, keeping first.'.format(self.file,current_feature))
+                        warnings.warn('{} file contains multiple entries with ID {}, keeping first.'.format(self.file,current_feature))
                     else:
                         self.features[current_feature.ID] = current_feature
                         if 'Parent' in current_feature.records:
@@ -302,7 +303,7 @@ class GFF:
                     for character in range(len(line)):
                         if line in self.contigs or len(line) == 0:
                             if len(line) == 0:
-                                print('Warning: Contig names are not matched in FASTA sequence headers.')
+                                warnings.warn('Contig names are not matched in FASTA sequence headers.')
                             current_contig = self.contigs[line] ; break
                         else:
                             line = line[0:len(line)-1]
@@ -328,7 +329,7 @@ class GFF:
                         for character in range(len(line)):
                             if line in self.contigs or len(line) == 0:
                                 if len(line) == 0:
-                                    print('Warning: Contig names are not matched in FASTA sequence headers.')
+                                    warnings.warn('Contig names are not matched in FASTA sequence headers.')
                                 current_contig = self.contigs[line] ; break
                             else:
                                 line = line[0:len(line)-1]
@@ -365,7 +366,7 @@ class GFF:
                 last_feature = family_heirarchy.stop
                 self.indexed_features[current_index] = family_heirarchy
             elif family_heirarchy.stop < last_feature:
-                print('Warning! Feature order in file does not match ordering on contig. Indices will be invalid.\n'.format(parent_ID))
+                warnings.warn('Feature order in file does not match ordering on contig. Indices will be invalid.\n'.format(parent_ID))
             # add heirarchy objects and indices to all features
             for relative in family_list:
                 relative.family = family_heirarchy
@@ -438,7 +439,7 @@ class GFF:
             if feature_type in out_feature.family.unique_features.keys(): # this only works for 1:1 relationships, e.g. one CDS per gene
                 out_feature = out_feature.family.unique_features.get(feature_type)
             elif feature_type:
-                print('Warining: no unique {} feature in {} feature heirarchy'.format(feature_type,feature_lookup))
+                warnings.warn('No unique {} feature in {} feature heirarchy'.format(feature_type,feature_lookup))
         if as_family:
                 out_feature = out_feature.family
         return out_feature # returns exactly one feature object, or 'None'
@@ -688,6 +689,12 @@ if __name__ == "__main__":
     class ProggleHelpFormatter(argparse.RawTextHelpFormatter):
         def _split_lines(self, text, width):
             return text.splitlines()
+    
+       # Custom error and warning format
+    def ProggleWarningFormat(message, category, filename, lineno, file=None, line=None):
+        return f"{category.__name__}: {message}\n{filename} line {lineno}\n"
+    
+    warnings.formatwarning = ProggleWarningFormat
 
       # PROGGLE main script functions
     def parse_args():
@@ -793,6 +800,9 @@ if __name__ == "__main__":
         parser.add_argument("-wf", "--without_fasta",
             action="store_false",
             help="Do not inclue FASTA sequence in GFF output file.")
+        parser.add_argument("-q", "--quiet_mode_off",
+            action="store_true",
+            help="Print error and warning messages verbosely.")
         return parser.parse_args()
 
     def write_region(out_region,out_format,rstart=0,rstop=0,output_file=None,rename_in_fasta=False,fasta_split=60):
@@ -871,6 +881,7 @@ if __name__ == "__main__":
     rename_contigs = args.rename_contigs
     contig_parameters = args.contigs
     filtering = args.filter_features
+    verbose = args.quiet_mode_off
     without_fasta = args.without_fasta
     rstart,rstop = (0,0) # set rstart and rstop to 0 without contig parameters
     # parse contig parameters
@@ -954,7 +965,7 @@ if __name__ == "__main__":
         try:
             gff_input.add_metadata(genome_metadata)
         except:
-            print("Warning: Could not add genome metadata.")
+            warnings.warn("Could not add genome metadata.")
     if feature_analysis_data:
         gff_input.add_feature_data(feature_analysis_data[0],analysis_type=feature_analysis_data[1],only_extract_columns=feature_analysis_data[2],pad_missing=True)
     
@@ -1068,6 +1079,6 @@ if __name__ == "__main__":
                     continue
                 write_feature(feature,out_format,output_file=outfile,fasta_split=split_every)
     else:
-        print("Warning: reached script end without making a decision!")
+        warnings.warn("Reached script end without making a decision!")
         print(gff_input.all_recorded_stats)
         print(gff_input.feature_type_dict)
