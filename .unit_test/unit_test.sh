@@ -12,7 +12,7 @@ while [ "$1" != "" ]; do
 			test_ID=$1
 			;;
 		-h | --help )
-          printf "\nUsage: Use unit_test.sh [-g GFF_FILEPATH] [-i LOCUS_ID]\n"
+          printf "\nUsage: ./unit_test.sh [-g GFF_FILEPATH] [-i LOCUS_ID]\n\n"
     			exit 0
       ;;
     * )                     printf "\nUnrecognised option:\tUse unit_test.sh -h | unit_test.sh --help\n"
@@ -79,7 +79,7 @@ out_fmts=(index number coords bed stats subset table tab subset_table subtab fas
 echo -e "\n" '>>>--' Testing search formatting  - see test_search.txt '--<<<'
 for i in ${out_fmts[@]} ; do echo '>>>--' Testing ${i} '--<<<'
   python ../proggle.py -s "${test_family_ID}" -f ${i} "${test_gff}"
-echo "" ; done > test_search.txt
+echo -e "\n\n" ; done > test_search.txt
 echo '>>>--' Testing search term "(toxin)" '--<<<' >> test_search.txt
 python ../proggle.py -s "toxin" -f "Name" "${test_gff}" >> test_search.txt
 # 3) search and extract to files
