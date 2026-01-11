@@ -1,5 +1,5 @@
 ### IMPORT DEPENDENCIES ###
-import sys, os, io, re, csv, warnings, argparse
+import sys, os, io, re, csv, warnings, traceback, argparse
 
 ### CLASS DEFINITIONS ###
 
@@ -44,7 +44,7 @@ class contig:
 
 ### GFF feature object class
 class GFF_feature:
-    def __init__(self, entry, contig_number, ID_stat='ID', alt_ID_stat='locus_tag'):
+    def __init__(self, entry, contig_number, ID_stat='ID', alt_ID_stat='locus_tag', input_index=1, verbose=False):
         self.raw_entry = entry
         self.feature = entry.split('\t')
         self.contig_name = self.feature[0]
@@ -54,19 +54,27 @@ class GFF_feature:
         self.contig_number = contig_number
         self.coords = '{}~{}~{}'.format(self.contig_number,self.start,self.stop)
         self.feature_info = {stat.split('=')[0]:stat.split('=')[1] for stat in self.feature[len(self.feature)-1].split(';')}
-        if ID_stat in self.feature_info.keys():
+        self.records = self.feature_info.keys()
+        if ID_stat in self.records:
             self.ID = self.feature_info[ID_stat]
         elif alt_ID_stat and alt_ID_stat in self.feature_info.keys():
             self.ID = self.feature_info[alt_ID_stat]
         else:
             if verbose:
-                warnings.warn('No {} stat or alternative for {} feature. Generating from loci ({})...'.format(ID_stat,self.seq_type,self.coords))
-            self.ID = self.coords
+                warnings.warn(f'No {ID_stat} stat or alternative for {self.seq_type} feature at loci {self.coords}. Adding ID...')
+            try:
+                self.ID = '_'.join([str(self.contig_name),self.seq_type,str(input_index).zfill(5)])
+                ID_added = {'ID': self.ID}
+                ID_added.update(self.feature_info)
+                self.feature_info = ID_added
+                first_stat = list(self.records)[0]
+                self.raw_entry = self.raw_entry.replace(first_stat,f'ID={self.ID};{first_stat}')
+            except:
+                raise ValueError(f'Could not determine or generate {ID_stat} stat or alternative for {self.seq_type} feature at loci {self.coords}.')
         self.idx = 0
         self.Parent = self.feature_info.get('Parent') if 'Parent' in self.feature_info else self.ID
         self.family = self.Parent
-        self.records = self.feature_info.keys()
-
+    
     def __repr__(self):
         return self.ID
 
@@ -235,7 +243,7 @@ def locus_tag(self,as_feature=True): # determine a locus tag
 
 ### Main GFF file object class
 class GFF:
-    def __init__(self, file, ID_stat='ID', update_feature_stats=False, alt_fasta_file=None, alt_ID_stat=None):
+    def __init__(self, file, ID_stat='ID', update_feature_stats=False, alt_fasta_file=None, alt_ID_stat=None, verbose=False):
         self.file = file
         self.name = os.path.basename(os.path.splitext(self.file)[0])
         self.metadata = {'Genome': self.name}
@@ -257,6 +265,7 @@ class GFF:
         # read through the file and parse information line by line
         with open(self.file,'r') as infile:
             all_recorded_stats = [] # a list to record each unique combination of recorded stats per gff file
+            duplicate_count = 0 # a record of how many troublesome features there are
             for line in infile:
                 line = line.rstrip('\n')
                 if line.startswith('##'):
@@ -272,7 +281,7 @@ class GFF:
                         self.file_info.append(line)
                 elif line.split('\t')[0] in self.contigs:
                     current_contig = self.contigs[line.split('\t')[0]] # contig object: current contig
-                    current_feature = GFF_feature(line,current_contig.number,ID_stat,alt_ID_stat) # feature object: current feature
+                    current_feature = GFF_feature(line,current_contig.number,ID_stat,alt_ID_stat,verbose=verbose) # feature object: current feature
                     # record the stats provided for each feature to generate a list of total available stats
                     if list(current_feature.records) not in all_recorded_stats:
                         all_recorded_stats.append(list(current_feature.records))
@@ -282,18 +291,23 @@ class GFF:
                         self.feature_type_dict[current_feature.seq_type] += 1
                     # add new stats from current feature to dictionary
                     if current_feature.ID in self.features:
-                        warnings.warn('{} file contains multiple entries with ID {}, keeping first.'.format(self.file,current_feature))
-                    else:
-                        self.features[current_feature.ID] = current_feature
-                        if 'Parent' in current_feature.records:
-                            self.children[current_feature.ID] = current_feature.Parent
-                        else: # if there is no parent, we define this feature as a progenitor
-                            self.families[current_feature.ID] = [current_feature] # enter data as list, starting with progenitor
-                            # some prokaryote pangenome tools rename GFF features by ID, which should be handled here
-                            # e.g. PIRATE modifies parent feature IDs without updating the 'Parent' stat in the child entries
-                            if 'prev_ID' in current_feature.records: # 'prev_ID' used by PIRATE 'modified_gffs' to record the old ID
-                                self.renamed_parents[current_feature.lookup('prev_ID')] = current_feature.ID
-                    # add sequence data from the end of the file, if it is there
+                        duplicate_count +=1
+                        # 
+                        alternate_feature = GFF_feature(line,current_contig.number,ID_stat,alt_ID_stat,verbose=verbose,input_index=duplicate_count)
+                        if current_feature.ID == alternate_feature.ID: # handle exceptions where IDs are genuine duplicates
+                            warnings.warn('{} file contains multiple entries with ID {}, keeping first.'.format(self.file,current_feature))
+                            duplicate_count -=1
+                            continue
+                    self.features[current_feature.ID] = current_feature
+                    if 'Parent' in current_feature.records:
+                        self.children[current_feature.ID] = current_feature.Parent
+                    else: # if there is no parent, we define this feature as a progenitor
+                        self.families[current_feature.ID] = [current_feature] # enter data as list, starting with progenitor
+                        # some prokaryote pangenome tools rename GFF features by ID, which should be handled here
+                        # e.g. PIRATE modifies parent feature IDs without updating the 'Parent' stat in the child entries
+                        if 'prev_ID' in current_feature.records: # 'prev_ID' used by PIRATE 'modified_gffs' to record the old ID
+                            self.renamed_parents[current_feature.lookup('prev_ID')] = current_feature.ID
+                # add sequence data from the end of the file, if it is there
                 elif line.startswith('>'):
                     self.includes_FASTA = True
                     if len(self.contig_sequence) > 0: # if the sequence of a previous contig is not currently parsed and stored
@@ -426,12 +440,13 @@ class GFF:
         if feature_lookup in self.features:
             out_feature = self.features.get(feature_lookup)
         elif feature_lookup in self.indexed_features:
-            try:
-                out_feature = self.indexed_features.get(feature_lookup).progenitor
-            except: 
-                print(f'Error: index {feature_lookup}')
-                print(f'matches feature family "{self.indexed_features.get(feature_lookup)}"')
-                out_feature = default_value
+                out_feature = self.indexed_features.get(feature_lookup)
+                try:
+                    out_feature = out_feature.progenitor
+                except: 
+                    warnings.warn(f'No progenitor feature for {feature_lookup} in feature family\
+                     {self.indexed_features.get(feature_lookup)}, using default: {default_value}.')
+                    out_feature = default_value
         else:
             out_feature = default_value
         if isinstance(out_feature, GFF_feature):
@@ -657,7 +672,7 @@ def validate_input_file(input_path,enforced_extension=None,more_context='',extra
     if enforced_extension:
         input_file_extension = os.path.splitext(input_path)[1] # extract the file extension
         if input_file_extension != enforced_extension:
-            raise ValueError(f'Filetype error: must have {enforced_extension} extension, not {input_file_extension}.')
+            raise ValueError(f'Must have {enforced_extension} extension, not {input_file_extension}.')
     if extract_header:
         with open(input_path, newline='', encoding='utf-8-sig') as infile:
             return next(csv.reader(infile, delimiter=delimiter), None)
@@ -685,17 +700,24 @@ def translated(nucleotide_string):
 
 # Main PROGGLE script:
 if __name__ == "__main__":
+
+       # Custom error and warning format
+    def ProggleWarningFormat(message, category, filename, lineno, file=None, line=None):
+        return f"{category.__name__}: {message}\n{filename} line {lineno}\n"
+
+    def ProggleErrorFormat(exc_type, exc_value, exc_traceback):
+        from_traceback = traceback.extract_tb(exc_traceback)[-1]
+        filename,lineno = (from_traceback.filename,from_traceback.lineno)
+        print(f"{exc_type.__name__}: {exc_value}\n{filename} line {lineno}")
+    
+    warnings.formatwarning = ProggleWarningFormat
+    sys.excepthook = ProggleErrorFormat
+
        # Custom help page format
     class ProggleHelpFormatter(argparse.RawTextHelpFormatter):
         def _split_lines(self, text, width):
             return text.splitlines()
     
-       # Custom error and warning format
-    def ProggleWarningFormat(message, category, filename, lineno, file=None, line=None):
-        return f"{category.__name__}: {message}\n{filename} line {lineno}\n"
-    
-    warnings.formatwarning = ProggleWarningFormat
-
       # PROGGLE main script functions
     def parse_args():
         parser = argparse.ArgumentParser(
@@ -814,8 +836,6 @@ if __name__ == "__main__":
             else:
                 print(string)
         out_contig = gff_input.contigs.get(out_region)
-        print(rstart)
-        print(rstop)
         use_region = (rstart,rstop) if (rstop + rstart) != 0 else False
         out_sequence = out_region.print_sequence(reverse_strand=(rstart>rstop),split_every=fasta_split,region=use_region,rename=rename_in_fasta)
         return_string(out_sequence)
@@ -861,7 +881,7 @@ if __name__ == "__main__":
         elif out_format in my_out.feature_info:
             return_string(my_out.feature_info.get(out_format))
         else:
-            return_string(f'Error: No info {out_format} for {my_out}')
+            raise ValueError(f'No info {out_format} for {my_out}')
 
     # collect user arguments
     args = parse_args()
@@ -1016,7 +1036,7 @@ if __name__ == "__main__":
         if not found_features:
             found_features = gff_input.search_features(search_feature_info,regex=True)
         if not found_features:
-            raise Exception("Error: Nothing matched by search.")
+            raise Exception("Nothing matched by search.")
         # format the search result as a list - important for downstream output processing
         if type(found_features) != list:
             found_features = [found_features]
@@ -1079,6 +1099,6 @@ if __name__ == "__main__":
                     continue
                 write_feature(feature,out_format,output_file=outfile,fasta_split=split_every)
     else:
-        warnings.warn("Reached script end without making a decision!")
-        print(gff_input.all_recorded_stats)
+        warnings.warn("No parameters detected - printing file statistics:")
         print(gff_input.feature_type_dict)
+        print(gff_input.all_recorded_stats)
