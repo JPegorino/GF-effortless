@@ -751,6 +751,7 @@ gnl|UoE|Test_Genome_3	prokka	gene	144365	144745	.	+	.	ID=Test_Genome_00361_gene;
 gnl|UoE|Test_Genome_3	Prodigal:002006	CDS	144365	144745	.	+	0	ID=Test_Genome_00361;Parent=Test_Genome_00361_gene;Name=gcvH;gene=gcvH;inference=ab initio prediction:Prodigal:002006,similar to AA sequence:UniProtKB:P64214;locus_tag=Test_Genome_00361;product=Glycine cleavage system H protein;protein_id=gnl|UoE|Test_Genome_00361
 gnl|UoE|Test_Genome_3	prokka	gene	144809	145801	.	+	.	ID=Test_Genome_00362_gene;locus_tag=Test_Genome_00362
 gnl|UoE|Test_Genome_3	Prodigal:002006	CDS	144809	145801	.	+	0	ID=Test_Genome_00362;Parent=Test_Genome_00362_gene;inference=ab initio prediction:Prodigal:002006;locus_tag=Test_Genome_00362;product=hypothetical protein;protein_id=gnl|UoE|Test_Genome_00362
+gnl|UoE|Test_Genome_3	minced:0.4.2	repeat_region	145841	145874	.	.	.	note=FAKE CRISPR with 3 repeat units;second_note=absent in reality;rpt_family=CRISPR;rpt_type=direct;rpt_unit_seq=TGCAAGTTGGCGGGGCCCCAACA
 gnl|UoE|Test_Genome_3	prokka	gene	146349	146738	.	+	.	ID=Test_Genome_00363_gene;Name=rnmV_2;gene=rnmV_2;locus_tag=Test_Genome_00363
 gnl|UoE|Test_Genome_3	Prodigal:002006	CDS	146349	146738	.	+	0	ID=Test_Genome_00363;Parent=Test_Genome_00363_gene;eC_number=3.1.26.8;Name=rnmV_2;gene=rnmV_2;inference=ab initio prediction:Prodigal:002006,protein motif:HAMAP:MF_01469;locus_tag=Test_Genome_00363;product=Ribonuclease M5;protein_id=gnl|UoE|Test_Genome_00363
 gnl|UoE|Test_Genome_3	prokka	gene	146731	147027	.	+	.	ID=Test_Genome_00364_gene;locus_tag=Test_Genome_00364
