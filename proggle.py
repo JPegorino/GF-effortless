@@ -80,6 +80,18 @@ class GFF_feature:
 
     def add_family(self,heirarchy):
         self.family = heirarchy
+    
+    def progenitor(self,feature_dictionary,depth=0):
+        if depth > 10: # recursion limit - avoid cyclic / infinite recursion 
+            raise RuntimeError(f"{self.ID} feature progenitor detection exceeded recursion limit. Cannot handle feature families with > 10 levels.")
+        if self.ID == self.Parent: 
+            return self.ID
+        else:
+            try:
+                parent_feature = feature_dictionary.get(self.Parent)
+                return parent_feature.progenitor(feature_dictionary, depth + 1)
+            except:
+                raise KeyError(f"{self.ID} feature progenitor detection failed. Incorrect 'Parent' stat {parent_feature.Parent} for {parent_feature.ID} feature.")
 
     def lookup(self,stat,regex=True,default_value=None):
         if stat in self.feature_info:
@@ -356,7 +368,7 @@ class GFF:
 
         # re-iterate through the data to add information that requires the entire parsed file.
         # firstly, add offspring to families dictionary (currently just includes progenitors).
-        ### CURRENTLY, THIS CODE IS NOT SET UP TO HANDLE INDIRECT PARENTS/CHAINS --- TO FIX ###
+        ### CURRENTLY, THIS CODE IS NOT SET UP TO HANDLE PIRATE MODIFIED GFFS WITH INDIRECT PARENTS/CHAINS ###
         for child_ID,parent_ID in self.children.items():
             if self.families.get(parent_ID):
                 self.families.get(parent_ID).append(self.features.get(child_ID))
@@ -364,8 +376,11 @@ class GFF:
             elif self.renamed_parents.get(parent_ID):
                 guess_parent_ID = self.renamed_parents.get(parent_ID)
                 self.families.get(guess_parent_ID).append(self.features.get(child_ID))
+            elif parent_ID in self.children: # if the parent is not the root parent
+                progenitor_ID = self.features.get(parent_ID).progenitor(self.features)
+                self.families.get(progenitor_ID).append(self.features.get(child_ID))
             else:
-                raise KeyError('Error! Parent ID {} not found in file and no "Prev_ID" or equivalent stat for conversion'.format(parent_ID))
+                raise KeyError(f'Could not trace feature heirarchy of {child_ID}. Parent ID {parent_ID} may be invalid.\nNo alternative "Prev_ID" or equivalent stat for conversion.')
         # use the completed dictionary to create and add heirarchy objects to the GFF/feature objects and use these to add feature indices
         last_contig,current_index=(0,1000000-1) # to keep track of index order (helps check order of features in file)
         for progenitor,family_list in self.families.items():
@@ -380,7 +395,7 @@ class GFF:
                 last_feature = family_heirarchy.stop
                 self.indexed_features[current_index] = family_heirarchy
             elif family_heirarchy.stop < last_feature:
-                warnings.warn('Feature order in file does not match ordering on contig. Indices will be invalid.\n'.format(parent_ID))
+                warnings.warn('Feature order in file does not match ordering on contig. Indices will be invalid.')
             # add heirarchy objects and indices to all features
             for relative in family_list:
                 relative.family = family_heirarchy
@@ -1099,6 +1114,6 @@ if __name__ == "__main__":
                     continue
                 write_feature(feature,out_format,output_file=outfile,fasta_split=split_every)
     else:
-        warnings.warn("No parameters detected - printing file statistics:")
+        print("No parameters detected - printing file statistics:")
         print(gff_input.feature_type_dict)
         print(gff_input.all_recorded_stats)
