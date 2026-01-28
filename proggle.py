@@ -347,6 +347,7 @@ class GFF:
             validate_input_file(alt_fasta_file, enforced_extension=False, more_context='No sequences in GFF file and no alternative FASTA path provided.\nInferred alternative ')
             with open(alt_fasta_file,'r') as infile:
                 for line in infile:
+                    line = line.rstrip('\n')
                     if line.startswith('>'):
                         if len(self.contig_sequence) > 0: # if the sequence of a previous contig is not currently parsed and stored
                             current_contig.concatenate_sequence(''.join(self.contig_sequence)) # add it to the data for the contig
