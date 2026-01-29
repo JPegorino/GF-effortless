@@ -1127,3 +1127,8 @@ if __name__ == "__main__":
         print("No parameters detected - printing file statistics:")
         print(gff_input.feature_type_dict)
         print(gff_input.all_recorded_stats)
+
+        with open('TEST_OUTPUT.txt','w') as new_out:
+            for fkey,f in gff_input.families.items():
+                new_out.write('\t'.join([fkey,str(f)]))
+                new_out.write('\n')
