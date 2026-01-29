@@ -237,21 +237,21 @@ class GFF_feature_heirarchy:
         self.related_feature_info = { stat: '; '.join(sorted(set(attributes.values()))) for stat,attributes in self.related_feature_info.items()}
         self.attributes = {att: ', '.join(sorted(set(stat.split(',')))) for att,stat in self.attributes.items()}
 
-def __str__(self):
-    return self.progenitor.ID # return just the progenitor ID if the heirarchy is printed as string
+    def __str__(self):
+        return self.progenitor.ID # return just the progenitor ID if the heirarchy is printed as string
 
-def locus_tag(self,as_feature=True): # determine a locus tag 
-    if 'locus_tag' in self.attributes:
-        locus_tag = self.attributes.get('locus_tag')
-    else:
-        candidates = [f.ID for f in self.feature_family]
-        shortest = min(candidates, key=len)
-        if all(shortest in feature_ID for feature_ID in candidates):
-            candidates = [f for f in candidates if shortest not in f]
-            locus_tag = shortest
+    def locus_tag(self,as_feature=True): # determine a locus tag 
+        if 'locus_tag' in self.attributes:
+            locus_tag = self.attributes.get('locus_tag')
         else:
-            locus_tag = self.progenitor.ID
-    return self.feature_family.get(locus_tag) if as_feature else locus_tag
+            candidates = [f.ID for f in self.feature_family]
+            shortest = min(candidates, key=len)
+            if all(shortest in feature_ID for feature_ID in candidates):
+                candidates = [f for f in candidates if shortest not in f]
+                locus_tag = shortest
+            else:
+                locus_tag = self.progenitor.ID
+        return self.feature_family.get(locus_tag) if as_feature else locus_tag
 
 ### Main GFF file object class
 class GFF:
