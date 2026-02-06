@@ -309,6 +309,7 @@ class GFF:
                         if current_feature.ID == alternate_feature.ID: # handle exceptions where IDs are genuine duplicates
                             warnings.warn('{} file contains multiple entries with ID {}, keeping first.'.format(self.file,current_feature))
                             duplicate_count -=1
+                            # CODE TO RENAME DUPLICATE FEATURES WOULD GO HERE
                             continue
                     self.features[current_feature.ID] = current_feature
                     if 'Parent' in current_feature.records:
@@ -388,6 +389,12 @@ class GFF:
             family_heirarchy = GFF_feature_heirarchy(family_list)
             self.families[progenitor] = family_heirarchy
             # determine feature indices for progenitors (features in the same family should have matching indices)
+            if not {'CDS', 'gene'} & family_heirarchy.feature_tally.keys():
+                # warnings.warn(f'{family_heirarchy} feature families lacking CDS/gene can break contig order, skipping from indexing:\n{family_heirarchy.feature_tally}')
+                            # add heirarchy objects and indices to all features
+                for relative in family_list:
+                    relative.family = family_heirarchy
+                continue # to avoid bugs, only index fearture familes with 1+ 'gene' or 'CDS' type features
             current_contig_number = family_heirarchy.progenitor.contig_number
             if current_contig_number != last_contig: # start of new contig
                 last_contig,last_feature,current_index = (current_contig_number,0,1000000*current_contig_number)
@@ -396,7 +403,8 @@ class GFF:
                 last_feature = family_heirarchy.stop
                 self.indexed_features[current_index] = family_heirarchy
             elif family_heirarchy.stop < last_feature:
-                warnings.warn('Feature order in file does not match ordering on contig. Indices will be invalid.')
+                # print(f'uh oh! {family_heirarchy} with {family_heirarchy.stop} > {last_feature} at {current_index} on {current_contig_number}!')
+                warnings.warn('CDS/gene feature order in file does not match ordering on contig. Indices will be invalid.')
             # add heirarchy objects and indices to all features
             for relative in family_list:
                 relative.family = family_heirarchy
@@ -1127,8 +1135,3 @@ if __name__ == "__main__":
         print("No parameters detected - printing file statistics:")
         print(gff_input.feature_type_dict)
         print(gff_input.all_recorded_stats)
-
-        with open('TEST_OUTPUT.txt','w') as new_out:
-            for fkey,f in gff_input.families.items():
-                new_out.write('\t'.join([fkey,str(f)]))
-                new_out.write('\n')
