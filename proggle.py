@@ -291,6 +291,8 @@ class GFF:
                         # self.coords.get(current_contig.number)[0] = self.coords.get(current_contig.number)[current_contig.length+1] = "contig_break"
                     else:
                         self.file_info.append(line)
+                elif line.startswith('#'):
+                    pass # ignores comment lines (these will not be parsed)
                 elif line.split('\t')[0] in self.contigs:
                     current_contig = self.contigs[line.split('\t')[0]] # contig object: current contig
                     current_feature = GFF_feature(line,current_contig.number,ID_stat,alt_ID_stat,verbose=verbose) # feature object: current feature
