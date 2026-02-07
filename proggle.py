@@ -405,7 +405,6 @@ class GFF:
                 last_feature = family_heirarchy.stop
                 self.indexed_features[current_index] = family_heirarchy
             elif family_heirarchy.stop < last_feature:
-                # print(f'uh oh! {family_heirarchy} with {family_heirarchy.stop} > {last_feature} at {current_index} on {current_contig_number}!')
                 warnings.warn('CDS/gene feature order in file does not match ordering on contig. Indices will be invalid.')
             # add heirarchy objects and indices to all features
             for relative in family_list:
