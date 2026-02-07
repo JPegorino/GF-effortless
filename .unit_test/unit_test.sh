@@ -8,6 +8,9 @@ while [ "$1" != "" ]; do
     -g | --gff )	shift
 			raw_gff=$1
       ;;
+	  -f | --sequence_fasta )		shift
+			sequence_fasta=$1
+			;;
 	  -i | --locus_ID )		shift
 			test_ID=$1
 			;;
@@ -29,12 +32,21 @@ test_gff="test_$(basename ${raw_gff})"
 if [[ ! -f "${test_gff}" ]] ; then
   cp "${raw_gff}" "${test_gff}" || exit 1
 fi
+if [[ -f "${sequence_fasta}" ]] ; then
+  cp "${sequence_fasta}" "${test_gff/.gff/.fasta}" || exit 1
+  # a sequence file with the same name should be auto-detected (no need for parameter)
+fi
 if [[ -z "${test_ID}" ]] ; then
   test_ID=$(grep -m8 "ID=" "${test_gff}" | tail -1 | cut -d';' -f1 | cut -d'=' -f2)
 fi
+# set output formats
+if [[ -f "${sequence_fasta}" ]] ; then
+  out_fmts=(index number coords features gff bed stats subset table tab subset_table subtab ffn protein faa fa fna)
+else 
+  out_fmts=(index number coords features gff bed stats subset table tab subset_table subtab fasta ffn protein faa fa fna)
+fi
 
 # Prepare Software & Diagnostics Logs
-out_fmts=(index number coords features gff bed stats subset table tab subset_table subtab fasta ffn protein faa fa fna)
 diagnostics_log="test_run_unittest.log"
 if [[ -f "${diagnostics_log}" ]] ; then
   echo 'Diagnostics log already exists... overwrite?'
@@ -57,6 +69,10 @@ python ../proggle.py -f 'ID' -o 'only_exists_if_test_failed.err' # should fail w
 ls 'only_exists_if_test_failed.err'
 echo -e "\n" '>>>--' Testing no parameters '--<<<'
 python ../proggle.py "${test_gff}" || exit 1  # should reach end of file
+if [[ -f "${sequence_fasta}" ]] ; then
+  echo -e "\n" '>>>--' Testing with sequence file parameter '--<<<'
+  python ../proggle.py -sf ${sequence_fasta} "${test_gff}" # should detect sequence file and reach end of gff file as above
+fi
 echo -e "\n" '>>>--' Testing basic search: "${test_ID}" '--<<<'
 python ../proggle.py -s "${test_ID}" "${test_gff}"
 echo -e "\n" '>>>--' Testing matchless search '--<<<'
@@ -75,7 +91,11 @@ echo "locus tag: - ${test_family_ID}"
 test_ID=$(python ../proggle.py -s "${test_ID}" -f "ID" "${test_gff}")
 echo "CDS name: - ${test_ID}"
 # 2) search and extract
-out_fmts=(index number coords bed stats subset table tab subset_table subtab fasta ffn protein faa fa fna)
+if [[ -f "${sequence_fasta}" ]] ; then
+  out_fmts=(index number coords features gff bed stats subset table tab subset_table subtab ffn protein faa fa fna)
+else 
+  out_fmts=(index number coords features gff bed stats subset table tab subset_table subtab fasta ffn protein faa fa fna)
+fi
 echo -e "\n" '>>>--' Testing search formatting  - see test_search.txt '--<<<'
 for i in ${out_fmts[@]} ; do echo '>>>--' Testing ${i} '--<<<'
   python ../proggle.py -s "${test_family_ID}" -f ${i} "${test_gff}"
@@ -121,7 +141,6 @@ echo -e "\n" '>>>--' Testing search for 3kbp up/downstream flanking regions usin
 python ../proggle.py -n 'u' -us 1000 -ds 2000 -s "${test_family_ID}" "${test_gff}" >> test_search.txt
 echo -e "\n" '>>>--' Testing search for 1 up/2 downstresam flanking features, returning faa fmt with 9bp us sequence '--<<<' >> test_search.txt
 python ../proggle.py -n '~1' 2 -s "${test_family_ID}" -us 3 -f faa -fs 120 "${test_gff}" >> test_search.txt
-echo -e '\n\n>>>--' Troubleshooting - checking error in synteny search occurs when using fna output '--<<<\n'
 echo -e "\n" '>>>--' Testing search for preceeding flanking region to start of farthest CDS within 3000kb in fna fmt '--<<<' >> test_search.txt
 python ../proggle.py -n -3000 -f "fna" -s "${test_family_ID}" "${test_gff}" >> test_search.txt
 
