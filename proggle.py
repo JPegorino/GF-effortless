@@ -107,7 +107,7 @@ class GFF_feature:
             return self.family.attributes[stat]
         elif regex:
             pattern = re.compile(r"{}".format(stat))
-            matching_attributes = [attribute for attribute in self.family.attributes.keys() if pattern.search(attribute)]
+            matching_attributes = [attribute for attribute in self.family.attributes.keys() if pattern.search(str(attribute))]
             return matching_attributes #if len(matching_attributes) > 0 else default_value
         else:
             return default_value
@@ -234,8 +234,8 @@ class GFF_feature_heirarchy:
         self.stop = max(feature_coordinates)
         # NB: these do not have directionality ('start' means 'first bp', not 'CDS start' or 'gene start')
         # finally, iterate through the extracted stats/attributes one last time to remove duplication
-        self.related_feature_info = { stat: '; '.join(sorted(set(attributes.values()))) for stat,attributes in self.related_feature_info.items()}
-        self.attributes = {att: ', '.join(sorted(set(stat.split(',')))) for att,stat in self.attributes.items()}
+        self.related_feature_info = { stat: '; '.join(sorted(set(map(str, attributes.values())))) for stat,attributes in self.related_feature_info.items()}
+        self.attributes = {att: ', '.join(sorted(set(str(stat).split(',')))) for att,stat in self.attributes.items()}
 
     def __str__(self):
         return self.progenitor.ID # return just the progenitor ID if the heirarchy is printed as string
@@ -451,6 +451,14 @@ class GFF:
         for feature_ID,current_feature in self.features.items():
             new_contig_name = new_names[current_feature.contig_name]
             current_feature.rename_contig(new_contig_name)
+
+    def update_feature_heirarchies(self):
+        for progenitor_ID,existing_heirarchy in self.families.items():
+            family_list = existing_heirarchy.feature_family
+            updated_heirarchy = GFF_feature_heirarchy(family_list)
+            self.families[progenitor_ID] = updated_heirarchy
+            for feature in family_list:
+                feature.family = updated_heirarchy
 
     def feature(self,feature_lookup,as_family=False,feature_type=None,default_value=None):
         if feature_lookup in self.features:
@@ -1004,7 +1012,8 @@ if __name__ == "__main__":
             warnings.warn("Could not add genome metadata.")
     if feature_analysis_data:
         gff_input.add_feature_data(feature_analysis_data[0],analysis_type=feature_analysis_data[1],only_extract_columns=feature_analysis_data[2],pad_missing=True)
-    
+    gff_input.update_feature_heirarchies()
+
     # generate output file name
     if not out_file and not search_feature_info:
         # use input name if none specified (default)
