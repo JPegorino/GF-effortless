@@ -279,7 +279,7 @@ class GFF:
             all_recorded_stats = [] # a list to record each unique combination of recorded stats per gff file
             duplicate_count = 0 # a record of how many troublesome features there are
             for line in infile:
-                line = line.rstrip('\n')
+                line = line.rstrip('\r').rstrip('\n')
                 if line.startswith('##'):
                     if line.startswith('##sequence-region'):
                         self.contig_count += 1
@@ -291,6 +291,8 @@ class GFF:
                         # self.coords.get(current_contig.number)[0] = self.coords.get(current_contig.number)[current_contig.length+1] = "contig_break"
                     else:
                         self.file_info.append(line)
+                elif line.startswith('#'):
+                    pass # ignores comment lines (these will not be parsed)
                 elif line.split('\t')[0] in self.contigs:
                     current_contig = self.contigs[line.split('\t')[0]] # contig object: current contig
                     current_feature = GFF_feature(line,current_contig.number,ID_stat,alt_ID_stat,verbose=verbose) # feature object: current feature
@@ -348,7 +350,7 @@ class GFF:
             validate_input_file(alt_fasta_file, enforced_extension=False, more_context='No sequences in GFF file and no alternative FASTA path provided.\nInferred alternative ')
             with open(alt_fasta_file,'r') as infile:
                 for line in infile:
-                    line = line.rstrip('\n')
+                    line = line.rstrip('\r').rstrip('\n')
                     if line.startswith('>'):
                         if len(self.contig_sequence) > 0: # if the sequence of a previous contig is not currently parsed and stored
                             current_contig.concatenate_sequence(''.join(self.contig_sequence)) # add it to the data for the contig
@@ -364,7 +366,7 @@ class GFF:
                     else:
                         self.contig_sequence.append(line)
                 current_contig.concatenate_sequence(''.join(self.contig_sequence)) # store the parsed data for the final contig
-
+        
         # generate summary info
         self.all_recorded_stats = set(sum(all_recorded_stats, []))
 
@@ -432,7 +434,7 @@ class GFF:
                     more_info_to_add['GC'] = 100*len(feature_sequence.replace('T','').replace('A',''))/len(feature_sequence)
                 # Finally, update the feature stats from the dictionary
                 self.features[feature_ID].update(more_info_to_add)
-
+        
     def __repr__(self):
         return str(self.name) + '.gff'
 
