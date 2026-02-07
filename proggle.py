@@ -279,7 +279,7 @@ class GFF:
             all_recorded_stats = [] # a list to record each unique combination of recorded stats per gff file
             duplicate_count = 0 # a record of how many troublesome features there are
             for line in infile:
-                line = line.rstrip('\n')
+                line = line.rstrip('\r').rstrip('\n')
                 if line.startswith('##'):
                     if line.startswith('##sequence-region'):
                         self.contig_count += 1
@@ -311,6 +311,7 @@ class GFF:
                         if current_feature.ID == alternate_feature.ID: # handle exceptions where IDs are genuine duplicates
                             warnings.warn('{} file contains multiple entries with ID {}, keeping first.'.format(self.file,current_feature))
                             duplicate_count -=1
+                            # CODE TO RENAME DUPLICATE FEATURES WOULD GO HERE
                             continue
                     self.features[current_feature.ID] = current_feature
                     if 'Parent' in current_feature.records:
@@ -349,7 +350,7 @@ class GFF:
             validate_input_file(alt_fasta_file, enforced_extension=False, more_context='No sequences in GFF file and no alternative FASTA path provided.\nInferred alternative ')
             with open(alt_fasta_file,'r') as infile:
                 for line in infile:
-                    line = line.rstrip('\n')
+                    line = line.rstrip('\r').rstrip('\n')
                     if line.startswith('>'):
                         if len(self.contig_sequence) > 0: # if the sequence of a previous contig is not currently parsed and stored
                             current_contig.concatenate_sequence(''.join(self.contig_sequence)) # add it to the data for the contig
@@ -365,7 +366,7 @@ class GFF:
                     else:
                         self.contig_sequence.append(line)
                 current_contig.concatenate_sequence(''.join(self.contig_sequence)) # store the parsed data for the final contig
-
+        
         # generate summary info
         self.all_recorded_stats = set(sum(all_recorded_stats, []))
 
@@ -390,6 +391,12 @@ class GFF:
             family_heirarchy = GFF_feature_heirarchy(family_list)
             self.families[progenitor] = family_heirarchy
             # determine feature indices for progenitors (features in the same family should have matching indices)
+            if not {'CDS', 'gene'} & family_heirarchy.feature_tally.keys():
+                # warnings.warn(f'{family_heirarchy} feature families lacking CDS/gene can break contig order, skipping from indexing:\n{family_heirarchy.feature_tally}')
+                            # add heirarchy objects and indices to all features
+                for relative in family_list:
+                    relative.family = family_heirarchy
+                continue # to avoid bugs, only index fearture familes with 1+ 'gene' or 'CDS' type features
             current_contig_number = family_heirarchy.progenitor.contig_number
             if current_contig_number != last_contig: # start of new contig
                 last_contig,last_feature,current_index = (current_contig_number,0,1000000*current_contig_number)
@@ -398,7 +405,7 @@ class GFF:
                 last_feature = family_heirarchy.stop
                 self.indexed_features[current_index] = family_heirarchy
             elif family_heirarchy.stop < last_feature:
-                warnings.warn('Feature order in file does not match ordering on contig. Indices will be invalid.')
+                warnings.warn('CDS/gene feature order in file does not match ordering on contig. Indices will be invalid.')
             # add heirarchy objects and indices to all features
             for relative in family_list:
                 relative.family = family_heirarchy
@@ -426,7 +433,7 @@ class GFF:
                     more_info_to_add['GC'] = 100*len(feature_sequence.replace('T','').replace('A',''))/len(feature_sequence)
                 # Finally, update the feature stats from the dictionary
                 self.features[feature_ID].update(more_info_to_add)
-
+        
     def __repr__(self):
         return str(self.name) + '.gff'
 
