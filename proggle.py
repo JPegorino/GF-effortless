@@ -630,6 +630,11 @@ class GFF:
                 feature_analysis_data = add_data.get(feature_name)
                 feature.update(feature_analysis_data)
             else:
+                related_features = feature.family.feature_family
+                for related_feature in related_features:
+                    if related_feature.ID in add_data.keys():
+                        feature_analysis_data = add_data.get(related_feature.ID)
+                        feature.update(feature_analysis_data)
                 if pad_missing:
                     filler_dict = {header_line[i].replace(' ','_'):'None' for i in keep_columns}
                     feature.update(filler_dict)
