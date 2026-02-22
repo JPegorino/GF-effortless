@@ -86,7 +86,7 @@ class GFF_feature:
         return self.ID
 
     def add_family(self,heirarchy):
-        self.family = heirarchy
+        self.family = self.gff.families.get(self.progenitor())
     
     def progenitor(self,depth=0):
         if depth > 10: # recursion limit - avoid cyclic / infinite recursion 
@@ -431,12 +431,11 @@ class GFF:
                 if feature_ID == feature.coords:
                     more_info_to_add[ID_stat] = feature.coords
                 # If contig fasta sequences were provided, add sequence stats
-                if len(self.contig_sequence) > 0:
-                    feature_contig = self.contigs[feature.contig.name]
+                if len(self.contig.sequence) > 0:
                     feature_sequence = ''.join(feature.sequence())
                     more_info_to_add['sequence_length'] = len(feature_sequence)
-                    more_info_to_add['contig_sequence_length'] = feature_contig.length
-                    more_info_to_add['contig_boundary_distance'] = min(min(feature.start,feature.stop),feature_contig.length-max(feature.start,feature.stop))
+                    more_info_to_add['contig_sequence_length'] = feature.contig.length
+                    more_info_to_add['contig_boundary_distance'] = min(min(feature.start,feature.stop),feature.contig.length-max(feature.start,feature.stop))
                     more_info_to_add['GC'] = 100*len(feature_sequence.replace('T','').replace('A',''))/len(feature_sequence)
                 # Finally, update the feature stats from the dictionary
                 self.features[feature_ID].update(more_info_to_add)
@@ -456,19 +455,19 @@ class GFF:
                 current_contig.rename(new_name=False,include_number=True)
             else:
                 current_contig.rename(new_name=rename_contigs,include_number=True)
-            if type(contig_ID) == str:
-                new_contig_name = current_contig.name
-                new_names[contig_ID] = new_contig_name
-            else:
-                new_contig_name = contig_ID
-            # creating a replacement dictionary within this loop preserves the order
-            new_contigs[new_contig_name] = current_contig
-        self.contigs = new_contigs
-        for feature_ID,current_feature in self.features.items():
-            new_contig_name = new_names[current_feature.contig.name]
-            current_feature.rename_contig(new_contig_name)
+        
+        # TO DO: It needs to be tested whether the code below is still needed with GFF_contig and GFF_features sharing data from the host
 
-    def update_feature_heirarchies(self):
+        #     if type(contig_ID) == str:
+        #         new_contig_name = current_contig.name
+        #         new_names[contig_ID] = new_contig_name
+        #     else:
+        #         new_contig_name = contig_ID
+        #     # creating a replacement dictionary within this loop preserves the order
+        #     new_contigs[new_contig_name] = current_contig
+        # self.contigs = new_contigs
+
+    def update_feature_heirarchies(self): # Is this still necessary with families linked to features via GFF object itself
         for progenitor_ID,existing_heirarchy in self.families.items():
             family_list = existing_heirarchy.feature_family
             updated_heirarchy = GFF_feature_heirarchy(family_list)
@@ -491,10 +490,13 @@ class GFF:
             out_feature = default_value
         if isinstance(out_feature, GFF_feature):
             # the code below allows retreival of data for an alternate feature type in the same family (e.g. CDS info for a gene) if there is only one
-            if feature_type in out_feature.family.unique_features.keys(): # this only works for 1:1 relationships, e.g. one CDS per gene
-                out_feature = out_feature.family.unique_features.get(feature_type)
-            elif feature_type:
-                warnings.warn('No unique {} feature in {} feature heirarchy'.format(feature_type,feature_lookup))
+            if feature_type:
+                if not isinstance(out_feature.family, GFF_feature_heirarchy):
+                    raise TypeError(f'{out_feature.family}: Must be GFF_Feature_heirarchy object to convert between feature types, not {type(out_feature.family)}')
+                if feature_type in out_feature.family.unique_features.keys(): # this only works for 1:1 relationships, e.g. one CDS per gene
+                    out_feature = out_feature.family.unique_features.get(feature_type)
+                else:
+                    warnings.warn('No unique {} feature in {} feature heirarchy'.format(feature_type,feature_lookup))
         if as_family:
                 out_feature = out_feature.family
         return out_feature # returns exactly one feature object, or 'None'
@@ -531,8 +533,7 @@ class GFF:
         if strand_aware and current_feature.strand == '-':
             bf,af = af,bf # swap before and after distances if the sequence is on the - strand
         if in_bp: # bf and af are distances (bp) befopre/after gene (instead of feature counts)
-            current_contig_length = self.contigs.get(current_feature.contig.name).length
-            bf, af = max(current_feature.start - bf, 1), min(current_feature.stop + af, current_contig_length)
+            bf, af = max(current_feature.start - bf, 1), min(current_feature.stop + af, current_feature.contig.length)
             current_index, current_start = current_feature.idx, current_feature.start
             while current_start > bf:
                 current_index -= 1
@@ -1100,16 +1101,12 @@ if __name__ == "__main__":
         if out_file:
             out_file = open(out_file,'a')
         if out_format in ['fa','fna']:
-            contig_with_nearby_features = found_features[0].contig.name
-            n_contig = gff_input.contigs.get(contig_with_nearby_features)
+            out_contig = found_features[0].contig
             out_region_low = min(map(int, found_features[0].coords.split('~')[1:]))
             out_region_high = max(map(int, found_features[-1].coords.split('~')[1:]))
             out_region_low,out_region_high = (out_region_high,out_region_low) if remember_strand == '-' else (out_region_low,out_region_high)
-            # print([found_features,str(out_region_low),str(out_region_high)])
-            # print([found_features[0].ID,n_contig,str(out_region_low),str(out_region_high)])
-            out_region_tofasta = gff_input.contigs.get(n_contig)
             new_header = fasta_header if fasta_header not in gff_input.all_recorded_stats else None
-            write_region(n_contig,out_format,rstart=out_region_low,rstop=out_region_high,output_file=out_file,rename_in_fasta=new_header,fasta_split=split_every)
+            write_region(out_contig,out_format,rstart=out_region_low,rstop=out_region_high,output_file=out_file,rename_in_fasta=new_header,fasta_split=split_every)
         else:
             for feature in found_features:
                 write_feature(feature,out_format,output_file=out_file,fasta_split=split_every)
