@@ -138,16 +138,16 @@ class GFF_feature:
         self.feature = self.raw_entry.split('\t')
         self.contig.name = new_contig_name
 
-    def sequence(self,feature_contig,us=0,ds=0,protein=False):
-        if not type(feature_contig) == GFF_contig and len(feature_contig.sequence) > 0:
-            raise Exception('{} contig sequence not parsed'.format(feature_contig))
+    def sequence(self,us=0,ds=0,protein=False):
+        if len(self.contig.sequence) == 0:
+            raise Exception('{} contig sequence not parsed'.format(self.contig))
         if not type(us) == int and type(ds) == int:
             raise TypeError('upstream and downstream values must be numeric integers')
         if protein:
             us *= 3 ; ds *= 3
         if self.strand == '-':
             us,ds = ds,us # swap upstream and downstream values if the sequnce is on the - strand
-        parse_sequence = feature_contig.sequence[self.start+self.frame-1-us:self.stop+self.frame+ds].upper()
+        parse_sequence = self.contig.sequence[self.start+self.frame-1-us:self.stop+self.frame+ds].upper()
         if self.strand == '-':
             parse_sequence = parse_sequence.lower().replace('a','0').replace('t','2').replace('c','1').replace('g','3')
             parse_sequence = parse_sequence.replace('0','T').replace('2','A').replace('1','G').replace('3','C').upper()[::-1]
@@ -159,7 +159,7 @@ class GFF_feature:
         if type(fasta_name_stats) == str:
             fasta_name_stats = [fasta_name_stats]
         print_info = ['>{}'.format('_'.join([str(self.feature_info.get(stat)).replace(' ','-') for stat in fasta_name_stats if stat in self.feature_info]))]
-        parse_sequence = self.sequence(feature_contig,us,ds,protein) ### troubleshooting.
+        parse_sequence = self.sequence(us,ds,protein)
         out_sequence = ''.join(parse_sequence)
         split_value = split_every if split_every else len(out_sequence)
         print_info = print_info + [out_sequence[pos:pos+split_value] for pos in range(0, len(out_sequence), split_value)]
@@ -433,7 +433,7 @@ class GFF:
                 # If contig fasta sequences were provided, add sequence stats
                 if len(self.contig_sequence) > 0:
                     feature_contig = self.contigs[feature.contig.name]
-                    feature_sequence = ''.join(feature.sequence(feature_contig))
+                    feature_sequence = ''.join(feature.sequence())
                     more_info_to_add['sequence_length'] = len(feature_sequence)
                     more_info_to_add['contig_sequence_length'] = feature_contig.length
                     more_info_to_add['contig_boundary_distance'] = min(min(feature.start,feature.stop),feature_contig.length-max(feature.start,feature.stop))
