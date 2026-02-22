@@ -4,13 +4,16 @@ import sys, os, io, re, csv, warnings, traceback, argparse
 ### CLASS DEFINITIONS ###
 
 ### GFF contig object class
-class contig:
-    def __init__(self, entry, number):
+class GFF_contig:
+    def __init__(self, entry, number, GFF_file):
         self.contig = entry
+        self.number = number
+        self.gff = GFF_file
+        if not isinstance(self.gff, GFF):
+            raise TypeError(f"{self.gff}: contig objects must have associated objects of type GFF, not {type(self.gff)}")
         self.name = entry.split(' ')[1]
         self.length = int(entry.split(' ')[3])
         self.sequence = ''
-        self.number = number
 
     def __repr__(self):
         return self.name
@@ -44,26 +47,30 @@ class contig:
 
 ### GFF feature object class
 class GFF_feature:
-    def __init__(self, entry, contig_number, ID_stat='ID', alt_ID_stat='locus_tag', input_index=1, verbose=False):
+    def __init__(self, entry, contig, GFF_File, ID_stat='ID', input_index=1, verbose=False):
         self.raw_entry = entry
+        self.gff = GFF_file
+        if not isinstance(self.gff, GFF):
+            raise TypeError(f"{self.gff}: GFF_File must be type GFF, not {type(self.gff)}")
+        self.contig = contig
+        if not isinstance(self.contig, GFF_contig):
+            raise TypeError(f"{self.contig}: contig must be type GFF_contig, not {type(self.contig)}")
         self.feature = entry.split('\t')
-        self.contig_name = self.feature[0]
+        if self.feature[0] != self.contig.name:
+            raise ValueError(f"{self.contig.name}: Supplied GFF_contig object does not match feature contig name in file ({type(self.contig.name)})")
         self.seq_type = self.feature[2] ; self.strand = self.feature[6]
         self.frame = int(self.feature[7]) if self.feature[7] in list('012') else 0
         self.start = int(self.feature[3]) ; self.stop = int(self.feature[4])
-        self.contig_number = contig_number
-        self.coords = '{}~{}~{}'.format(self.contig_number,self.start,self.stop)
+        self.coords = '{}~{}~{}'.format(self.contig.number,self.start,self.stop)
         self.feature_info = {stat.split('=')[0]:stat.split('=')[1] for stat in self.feature[len(self.feature)-1].split(';')}
         self.records = self.feature_info.keys()
         if ID_stat in self.records:
             self.ID = self.feature_info[ID_stat]
-        elif alt_ID_stat and alt_ID_stat in self.feature_info.keys():
-            self.ID = self.feature_info[alt_ID_stat]
         else:
             if verbose:
                 warnings.warn(f'No {ID_stat} stat or alternative for {self.seq_type} feature at loci {self.coords}. Adding ID...')
             try:
-                self.ID = '_'.join([str(self.contig_name),self.seq_type,str(input_index).zfill(5)])
+                self.ID = '_'.join([str(self.contig.name),self.seq_type,str(input_index).zfill(5)])
                 ID_added = {'ID': self.ID}
                 ID_added.update(self.feature_info)
                 self.feature_info = ID_added
@@ -127,12 +134,12 @@ class GFF_feature:
     def rename_contig(self,new_contig_name):
         if not type(new_contig_name) == str:
             raise TypeError('contig names must be strings.')
-        self.raw_entry = self.raw_entry.replace(self.contig_name,new_contig_name)
+        self.raw_entry = self.raw_entry.replace(self.contig.name,new_contig_name)
         self.feature = self.raw_entry.split('\t')
-        self.contig_name = new_contig_name
+        self.contig.name = new_contig_name
 
     def sequence(self,feature_contig,us=0,ds=0,protein=False):
-        if not type(feature_contig) == contig and len(feature_contig.sequence) > 0:
+        if not type(feature_contig) == GFF_contig and len(feature_contig.sequence) > 0:
             raise Exception('{} contig sequence not parsed'.format(feature_contig))
         if not type(us) == int and type(ds) == int:
             raise TypeError('upstream and downstream values must be numeric integers')
@@ -147,7 +154,7 @@ class GFF_feature:
         return translated(parse_sequence) if protein else parse_sequence
 
     def print_sequence(self,feature_contig,fasta_name_stats='ID',split_every=None,us=0,ds=0,protein=False):
-        if not type(feature_contig) == contig and len(feature_contig.sequence) > 0:
+        if not type(feature_contig) == GFF_contig and len(feature_contig.sequence) > 0:
             raise Exception('{} contig sequence not parsed'.format(feature_contig))
         if type(fasta_name_stats) == str:
             fasta_name_stats = [fasta_name_stats]
@@ -174,7 +181,7 @@ class GFF_feature:
             color_value = self.lookup(bed_color,regex=False)
             RGB_format = re.compile('(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2}),(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2}),(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})')
             color = color_value if type(color_value) == 'str' and RGB_format.match(color_value) else '0,0,0'
-            bed_list = [self.contig_name,feature_start,feature_end,self.ID,self.strand,str(score),str(self.start-1),str(self.stop),color]
+            bed_list = [self.contig.name,feature_start,feature_end,self.ID,self.strand,str(score),str(self.start-1),str(self.stop),color]
             return '\t'.join(bed_list)
         else:
             entry_data_string = ';'.join([str(k) + '=' + str(v) for k,v in self.feature_info.items()])
@@ -255,7 +262,7 @@ class GFF_feature_heirarchy:
 
 ### Main GFF file object class
 class GFF:
-    def __init__(self, file, ID_stat='ID', update_feature_stats=False, alt_fasta_file=None, alt_ID_stat=None, verbose=False):
+    def __init__(self, file, ID_stat='ID', update_feature_stats=False, alt_fasta_file=None, verbose=False):
         self.file = file
         self.name = os.path.basename(os.path.splitext(self.file)[0])
         self.metadata = {'Genome': self.name}
@@ -283,7 +290,7 @@ class GFF:
                 if line.startswith('##'):
                     if line.startswith('##sequence-region'):
                         self.contig_count += 1
-                        current_contig = contig(line,self.contig_count)
+                        current_contig = GFF_contig(line,self.contig_count,self)
                         self.contigs[str(current_contig)] = current_contig
                         if current_contig.name != str(current_contig.number):
                             self.contigs[current_contig.number] = current_contig
@@ -295,7 +302,7 @@ class GFF:
                     pass # ignores comment lines (these will not be parsed)
                 elif line.split('\t')[0] in self.contigs:
                     current_contig = self.contigs[line.split('\t')[0]] # contig object: current contig
-                    current_feature = GFF_feature(line,current_contig.number,ID_stat,alt_ID_stat,verbose=verbose) # feature object: current feature
+                    current_feature = GFF_feature(line,current_contig,self,ID_stat,verbose=verbose) # feature object: current feature
                     # record the stats provided for each feature to generate a list of total available stats
                     if list(current_feature.records) not in all_recorded_stats:
                         all_recorded_stats.append(list(current_feature.records))
@@ -307,7 +314,7 @@ class GFF:
                     if current_feature.ID in self.features:
                         duplicate_count +=1
                         # 
-                        alternate_feature = GFF_feature(line,current_contig.number,ID_stat,alt_ID_stat,verbose=verbose,input_index=duplicate_count)
+                        alternate_feature = GFF_feature(line,current_contig,self,ID_stat,verbose=verbose,input_index=duplicate_count)
                         if current_feature.ID == alternate_feature.ID: # handle exceptions where IDs are genuine duplicates
                             warnings.warn('{} file contains multiple entries with ID {}, keeping first.'.format(self.file,current_feature))
                             duplicate_count -=1
@@ -397,7 +404,7 @@ class GFF:
                 for relative in family_list:
                     relative.family = family_heirarchy
                 continue # to avoid bugs, only index fearture familes with 1+ 'gene' or 'CDS' type features
-            current_contig_number = family_heirarchy.progenitor.contig_number
+            current_contig_number = family_heirarchy.progenitor.contig.number
             if current_contig_number != last_contig: # start of new contig
                 last_contig,last_feature,current_index = (current_contig_number,0,1000000*current_contig_number)
             if family_heirarchy.stop > last_feature:
@@ -425,7 +432,7 @@ class GFF:
                     more_info_to_add[ID_stat] = feature.coords
                 # If contig fasta sequences were provided, add sequence stats
                 if len(self.contig_sequence) > 0:
-                    feature_contig = self.contigs[feature.contig_name]
+                    feature_contig = self.contigs[feature.contig.name]
                     feature_sequence = ''.join(feature.sequence(feature_contig))
                     more_info_to_add['sequence_length'] = len(feature_sequence)
                     more_info_to_add['contig_sequence_length'] = feature_contig.length
@@ -458,7 +465,7 @@ class GFF:
             new_contigs[new_contig_name] = current_contig
         self.contigs = new_contigs
         for feature_ID,current_feature in self.features.items():
-            new_contig_name = new_names[current_feature.contig_name]
+            new_contig_name = new_names[current_feature.contig.name]
             current_feature.rename_contig(new_contig_name)
 
     def update_feature_heirarchies(self):
@@ -524,7 +531,7 @@ class GFF:
         if strand_aware and current_feature.strand == '-':
             bf,af = af,bf # swap before and after distances if the sequence is on the - strand
         if in_bp: # bf and af are distances (bp) befopre/after gene (instead of feature counts)
-            current_contig_length = self.contigs.get(current_feature.contig_name).length
+            current_contig_length = self.contigs.get(current_feature.contig.name).length
             bf, af = max(current_feature.start - bf, 1), min(current_feature.stop + af, current_contig_length)
             current_index, current_start = current_feature.idx, current_feature.start
             while current_start > bf:
@@ -687,7 +694,7 @@ class GFF:
                 if contig not in skip_contigs:
                     outfile.write(self.contigs[contig].write())
             for feature_ID,current_feature in self.features.items():
-                corresponding_contig = current_feature.contig_name
+                corresponding_contig = current_feature.contig.name
                 if corresponding_contig not in skip_contigs and feature_ID not in skip_entries:
                     outfile.write(self.features[feature_ID].write())
             if add_FASTA_sequence:
@@ -913,9 +920,9 @@ if __name__ == "__main__":
             return_string(f'{out_delimiter}'.join(key for key in stat_subset.keys()))
             return_string(f'{out_delimiter}'.join([str(val) for val in stat_subset.values()]))
         elif out_format == 'fasta' or out_format == 'ffn' or out_format == 'fa' or out_format == 'fna':
-            return_string(my_out.print_sequence(gff_input.contigs.get(my_out.contig_name),split_every=fasta_split,fasta_name_stats=fasta_header.split(';'),us=us,ds=ds))
+            return_string(my_out.print_sequence(gff_input.contigs.get(my_out.contig.name),split_every=fasta_split,fasta_name_stats=fasta_header.split(';'),us=us,ds=ds))
         elif out_format == 'protein' or out_format == 'faa':
-            return_string(my_out.print_sequence(gff_input.contigs.get(my_out.contig_name),fasta_header.split(';'),split_every=fasta_split,us=us,ds=ds,protein=True))
+            return_string(my_out.print_sequence(gff_input.contigs.get(my_out.contig.name),fasta_header.split(';'),split_every=fasta_split,us=us,ds=ds,protein=True))
         elif out_format in my_out.feature_info:
             return_string(my_out.feature_info.get(out_format))
         else:
@@ -1065,8 +1072,8 @@ if __name__ == "__main__":
     else:
         filtered_contig_list = []
     # gff_input.contigs = {contig_ID:contig for contig in gff_input.contigs if contig_ID not in filtered_contig_list}
-    # gff_input.features = {feature_ID:contig for contig in gff_input.features if feature.contig_name not in filtered_contig_list}
-    # gff_input.features = {feature_ID:contig for contig in gff_input.features if feature.contig_number not in filtered_contig_list}
+    # gff_input.features = {feature_ID:contig for contig in gff_input.features if feature.contig.name not in filtered_contig_list}
+    # gff_input.features = {feature_ID:contig for contig in gff_input.features if feature.contig.number not in filtered_contig_list}
 
     # conduct a single search if the search parameter was set - can then end script early
     if search_feature_info:
@@ -1093,7 +1100,7 @@ if __name__ == "__main__":
         if out_file:
             out_file = open(out_file,'a')
         if out_format in ['fa','fna']:
-            contig_with_nearby_features = found_features[0].contig_name
+            contig_with_nearby_features = found_features[0].contig.name
             n_contig = gff_input.contigs.get(contig_with_nearby_features)
             out_region_low = min(map(int, found_features[0].coords.split('~')[1:]))
             out_region_high = max(map(int, found_features[-1].coords.split('~')[1:]))
@@ -1132,7 +1139,7 @@ if __name__ == "__main__":
     elif out_format in ['index','number','coords','ffn','fasta','stats','protein','faa','bed','tab','table']:
         with open(out_file,'a') as outfile:
             for feature in gff_input.features.values():
-                if feature.contig_name in filtered_contig_list or feature.contig_number in filtered_contig_list:
+                if feature.contig.name in filtered_contig_list or feature.contig.number in filtered_contig_list:
                     continue
                 if feature.seq_type != 'CDS' or feature.ID in filtering:
                     continue
