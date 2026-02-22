@@ -85,7 +85,7 @@ class GFF_feature:
     def __repr__(self):
         return self.ID
 
-    def add_family(self,heirarchy):
+    def add_family(self):
         self.family = self.gff.families.get(self.progenitor())
     
     def progenitor(self,depth=0):
@@ -189,8 +189,9 @@ class GFF_feature:
 
 ### GFF feature heirarchy class
 class GFF_feature_heirarchy:
-    def __init__(self, feature_family):
-        self.feature_family = feature_family
+    def __init__(self, feature_family, GFF_file):
+        self.gff = GFF_file
+        self.feature_family = [self.gff.features.get(feature) for feature in feature_family]
         self.progenitor = self.feature_family[0]
         self.count = len(self.feature_family)
         self.start = 0
@@ -324,7 +325,7 @@ class GFF:
                     if 'Parent' in current_feature.records:
                         self.children[current_feature.ID] = current_feature.Parent
                     else: # if there is no parent, we define this feature as a progenitor
-                        self.families[current_feature.ID] = [current_feature] # enter data as list, starting with progenitor
+                        self.families[current_feature.ID] = [current_feature.ID] # enter data as list, starting with progenitor
                         # some prokaryote pangenome tools rename GFF features by ID, which should be handled here
                         # e.g. PIRATE modifies parent feature IDs without updating the 'Parent' stat in the child entries
                         if 'prev_ID' in current_feature.records: # 'prev_ID' used by PIRATE 'modified_gffs' to record the old ID
@@ -382,26 +383,26 @@ class GFF:
         ### CURRENTLY, THIS CODE IS NOT SET UP TO HANDLE PIRATE MODIFIED GFFS WITH INDIRECT PARENTS/CHAINS ###
         for child_ID,parent_ID in self.children.items():
             if self.families.get(parent_ID):
-                self.families.get(parent_ID).append(self.features.get(child_ID))
+                self.families.get(parent_ID).append(child_ID)
             # handle children whose parents have a modified ID stat (PIRATE) using a renaming dictionary.
             elif self.renamed_parents.get(parent_ID):
                 guess_parent_ID = self.renamed_parents.get(parent_ID)
-                self.families.get(guess_parent_ID).append(self.features.get(child_ID))
+                self.families.get(guess_parent_ID).append(child_ID)
             elif parent_ID in self.children: # if the parent is not the root parent
                 progenitor_ID = self.features.get(parent_ID).progenitor()
-                self.families.get(progenitor_ID).append(self.features.get(child_ID))
+                self.families.get(progenitor_ID).append(child_ID)
             else:
                 raise KeyError(f'Could not trace feature heirarchy of {child_ID}. Parent ID {parent_ID} may be invalid.\nNo alternative "Prev_ID" or equivalent stat for conversion.')
         # use the completed dictionary to create and add heirarchy objects to the GFF/feature objects and use these to add feature indices
         last_contig,current_index=(0,1000000-1) # to keep track of index order (helps check order of features in file)
         for progenitor,family_list in self.families.items():
-            family_heirarchy = GFF_feature_heirarchy(family_list)
+            family_heirarchy = GFF_feature_heirarchy(family_list,self)
             self.families[progenitor] = family_heirarchy
             # determine feature indices for progenitors (features in the same family should have matching indices)
             if not {'CDS', 'gene'} & family_heirarchy.feature_tally.keys():
                 # warnings.warn(f'{family_heirarchy} feature families lacking CDS/gene can break contig order, skipping from indexing:\n{family_heirarchy.feature_tally}')
                             # add heirarchy objects and indices to all features
-                for relative in family_list:
+                for relative in family_heirarchy.feature_family:
                     relative.family = family_heirarchy
                 continue # to avoid bugs, only index fearture familes with 1+ 'gene' or 'CDS' type features
             current_contig_number = family_heirarchy.progenitor.contig.number
@@ -414,8 +415,8 @@ class GFF:
             elif family_heirarchy.stop < last_feature:
                 warnings.warn('CDS/gene feature order in file does not match ordering on contig. Indices will be invalid.')
             # add heirarchy objects and indices to all features
-            for relative in family_list:
-                relative.family = family_heirarchy
+            for relative in family_heirarchy.feature_family:
+                relative.add_family()
                 relative.idx = current_index
 
         # and optionally, iterate back through all the features to add any holistic stats:
@@ -470,7 +471,7 @@ class GFF:
     def update_feature_heirarchies(self): # Is this still necessary with families linked to features via GFF object itself
         for progenitor_ID,existing_heirarchy in self.families.items():
             family_list = existing_heirarchy.feature_family
-            updated_heirarchy = GFF_feature_heirarchy(family_list)
+            updated_heirarchy = GFF_feature_heirarchy(family_list,self)
             self.families[progenitor_ID] = updated_heirarchy
             for feature in family_list:
                 feature.family = updated_heirarchy
