@@ -88,15 +88,15 @@ class GFF_feature:
     def add_family(self,heirarchy):
         self.family = heirarchy
     
-    def progenitor(self,feature_dictionary,depth=0):
+    def progenitor(self,depth=0):
         if depth > 10: # recursion limit - avoid cyclic / infinite recursion 
             raise RuntimeError(f"{self.ID} feature progenitor detection exceeded recursion limit. Cannot handle feature families with > 10 levels.")
         if self.ID == self.Parent: 
             return self.ID
         else:
             try:
-                parent_feature = feature_dictionary.get(self.Parent)
-                return parent_feature.progenitor(feature_dictionary, depth + 1)
+                parent_feature = self.gff.features.get(self.Parent)
+                return parent_feature.progenitor(depth +1)
             except:
                 raise KeyError(f"{self.ID} feature progenitor detection failed. Incorrect 'Parent' stat {parent_feature.Parent} for {parent_feature.ID} feature.")
 
@@ -388,7 +388,7 @@ class GFF:
                 guess_parent_ID = self.renamed_parents.get(parent_ID)
                 self.families.get(guess_parent_ID).append(self.features.get(child_ID))
             elif parent_ID in self.children: # if the parent is not the root parent
-                progenitor_ID = self.features.get(parent_ID).progenitor(self.features)
+                progenitor_ID = self.features.get(parent_ID).progenitor()
                 self.families.get(progenitor_ID).append(self.features.get(child_ID))
             else:
                 raise KeyError(f'Could not trace feature heirarchy of {child_ID}. Parent ID {parent_ID} may be invalid.\nNo alternative "Prev_ID" or equivalent stat for conversion.')
