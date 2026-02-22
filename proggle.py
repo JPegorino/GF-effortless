@@ -47,11 +47,11 @@ class GFF_contig:
 
 ### GFF feature object class
 class GFF_feature:
-    def __init__(self, entry, contig, GFF_File, ID_stat='ID', input_index=1, verbose=False):
+    def __init__(self, entry, contig, GFF_file, ID_stat='ID', input_index=1, verbose=False):
         self.raw_entry = entry
         self.gff = GFF_file
         if not isinstance(self.gff, GFF):
-            raise TypeError(f"{self.gff}: GFF_File must be type GFF, not {type(self.gff)}")
+            raise TypeError(f"{self.gff}: GFF_file must be type GFF, not {type(self.gff)}")
         self.contig = contig
         if not isinstance(self.contig, GFF_contig):
             raise TypeError(f"{self.contig}: contig must be type GFF_contig, not {type(self.contig)}")
@@ -431,7 +431,7 @@ class GFF:
                 if feature_ID == feature.coords:
                     more_info_to_add[ID_stat] = feature.coords
                 # If contig fasta sequences were provided, add sequence stats
-                if len(self.contig.sequence) > 0:
+                if len(feature.contig.sequence) > 0:
                     feature_sequence = ''.join(feature.sequence())
                     more_info_to_add['sequence_length'] = len(feature_sequence)
                     more_info_to_add['contig_sequence_length'] = feature.contig.length
