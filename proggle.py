@@ -1035,7 +1035,6 @@ if __name__ == "__main__":
             warnings.warn("Could not add genome metadata.")
     if feature_analysis_data:
         gff_input.add_feature_data(feature_analysis_data[0],analysis_type=feature_analysis_data[1],only_extract_columns=feature_analysis_data[2],pad_missing=True)
-    gff_input.update_feature_heirarchies()
 
     # generate output file name
     if not out_file and not search_feature_info:
