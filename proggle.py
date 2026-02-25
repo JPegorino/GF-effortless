@@ -1099,7 +1099,7 @@ if __name__ == "__main__":
             if not out_format:
                 out_format = 'bed' # return bed format by default
         if out_file:
-            out_file = open(out_file,'a')
+            out_file = open(out_file,'w')
         if out_format in ['fa','fna']:
             out_contig = found_features[0].contig
             out_region_low = min(map(int, found_features[0].coords.split('~')[1:]))
@@ -1114,8 +1114,12 @@ if __name__ == "__main__":
             out_file.close()
         sys.exit(0)
 
+    if out_format in gff_input.all_recorded_stats:
+        if fasta_header != 'ID': # default value
+            warnings.warn(f'out_format "{out_format}" overrides fasta_header when --search is not used, ignoring value "{fasta_header}".')
+        out_format,fasta_header = ('subtab',f'ID;{out_format}')
     if out_format == 'fa' or out_format == 'fna':
-        with open(out_file,'a') as outfile:
+        with open(out_file,'w') as outfile:
             for i in range(1,gff_input.contig_count+1):
                 current_contig = gff_input.contigs.get(i)
                 if current_contig.name in filtered_contig_list or current_contig.number in filtered_contig_list:
@@ -1131,10 +1135,10 @@ if __name__ == "__main__":
             rename_contigs=False,update_stats=update_gff_stats,
             add_FASTA_sequence=without_fasta,FASTA_Split_Every=split_every,
             skip_entries=filtering,skip_contigs=filtered_contig_list)
-    elif out_format in ['subset', 'subset_table', 'subtab', 'features']:
-        raise ValueError("out_format {} cannot be applied.".format(out_format))
-    elif out_format in ['index','number','coords','ffn','fasta','stats','protein','faa','bed','tab','table']:
-        with open(out_file,'a') as outfile:
+    # elif out_format in ['subset', 'subset_table', 'subtab', 'features']:
+    #     raise ValueError("out_format {} cannot be applied.".format(out_format))
+    elif out_format in ['index','number','coords','ffn','fasta','stats','protein','faa','bed','tab','table','subset','subset_table','subtab','features']:
+        with open(out_file,'w') as outfile:
             for feature in gff_input.features.values():
                 if feature.contig.name in filtered_contig_list or feature.contig.number in filtered_contig_list:
                     continue
