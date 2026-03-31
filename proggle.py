@@ -263,8 +263,9 @@ class GFF_feature_heirarchy:
 
 ### Main GFF file object class
 class GFF:
-    def __init__(self, file, ID_stat='ID', update_feature_stats=False, alt_fasta_file=None, verbose=False):
+    def __init__(self, file, ID_stat='ID', update_feature_stats=False, index_features=False, alt_fasta_file=None, verbose=False):
         self.file = file
+        self.indexed = False
         self.name = os.path.basename(os.path.splitext(self.file)[0])
         self.metadata = {'Genome': self.name}
         self.file_info = []
@@ -394,9 +395,29 @@ class GFF:
             else:
                 raise KeyError(f'Could not trace feature heirarchy of {child_ID}. Parent ID {parent_ID} may be invalid.\nNo alternative "Prev_ID" or equivalent stat for conversion.')
         # use the completed dictionary to create and add heirarchy objects to the GFF/feature objects and use these to add feature indices
+
+        # If the feature 'Parent' stat had been renamed (i.e. by PIRATE), update/restore this first
+        for feature_ID,feature in self.features.items():
+            if feature.Parent in self.renamed_parents:
+                feature.Parent = self.renamed_parents.get(feature.Parent)
+
+        # Optionally, index features and create feature heirarchy objects corresponding to each
+        if index_features:
+            self.index_features()
+            self.indexed = True
+
+        # and optionally, iterate back through all the features to add any holistic stats:
+        if update_feature_stats:
+            self.update_feature_stats()
+        
+    def __repr__(self):
+        return str(self.name) + '.gff'
+
+    def index_features(self):
         last_contig,current_index=(0,1000000-1) # to keep track of index order (helps check order of features in file)
+        # self.index()
         for progenitor,family_list in self.families.items():
-            family_heirarchy = GFF_feature_heirarchy(family_list,self)
+            family_heirarchy = GFF_feature_heirarchy(family_list,self) # method
             self.families[progenitor] = family_heirarchy
             # determine feature indices for progenitors (features in the same family should have matching indices)
             if not {'CDS', 'gene'} & family_heirarchy.feature_tally.keys():
@@ -418,31 +439,6 @@ class GFF:
             for relative in family_heirarchy.feature_family:
                 relative.add_family()
                 relative.idx = current_index
-
-        # and optionally, iterate back through all the features to add any holistic stats:
-        if update_feature_stats:
-            for feature_ID,feature in self.features.items():
-                # If the feature 'Parent' stat had been renamed (i.e. by PIRATE), update/restore this first
-                if feature.Parent in self.renamed_parents:
-                    feature.Parent = self.renamed_parents.get(feature.Parent)
-                # Then, create a dictionary of non-existing features to add
-                more_info_to_add = {'index': feature.idx,
-                                    'family': feature.family.progenitor.ID}
-                # Include the ID stat for any entries that were missing one
-                if feature_ID == feature.coords:
-                    more_info_to_add[ID_stat] = feature.coords
-                # If contig fasta sequences were provided, add sequence stats
-                if len(feature.contig.sequence) > 0:
-                    feature_sequence = ''.join(feature.sequence())
-                    more_info_to_add['sequence_length'] = len(feature_sequence)
-                    more_info_to_add['contig_sequence_length'] = feature.contig.length
-                    more_info_to_add['contig_boundary_distance'] = min(min(feature.start,feature.stop),feature.contig.length-max(feature.start,feature.stop))
-                    more_info_to_add['GC'] = 100*len(feature_sequence.replace('T','').replace('A',''))/len(feature_sequence)
-                # Finally, update the feature stats from the dictionary
-                self.features[feature_ID].update(more_info_to_add)
-        
-    def __repr__(self):
-        return str(self.name) + '.gff'
 
     def info(self,as_input=False):
         for piece_of_information in self.file_info:
@@ -476,6 +472,26 @@ class GFF:
             for feature in family_list:
                 feature.family = updated_heirarchy
 
+    def update_feature_stats(self):
+        for feature_ID,feature in self.features.items():
+            # Create a dictionary of non-existing features to add
+            # more_info_to_add = {'index': feature.family_index} # prefer this if available
+            more_info_to_add = {'index': feature.idx}
+            # Include the ID stat for any entries that were missing one
+            if feature_ID == feature.coords:
+                more_info_to_add[ID_stat] = feature.coords
+            # If contig fasta sequences were provided, add sequence stats
+            if len(self.contig_sequence) > 0:
+                if isinstance(feature.family, GFF_feature_heirarchy):
+                    more_info_to_add['family'] = feature.family.progenitor.ID
+                feature_sequence = ''.join(feature.sequence())
+                more_info_to_add['sequence_length'] = len(feature_sequence)
+                more_info_to_add['contig_sequence_length'] = feature.contig.length
+                more_info_to_add['contig_boundary_distance'] = min(min(feature.start,feature.stop),feature.contig.length-max(feature.start,feature.stop))
+                more_info_to_add['GC'] = 100*len(feature_sequence.replace('T','').replace('A',''))/len(feature_sequence)
+            # Finally, update the feature stats from the dictionary
+            self.features[feature_ID].update(more_info_to_add)
+
     def feature(self,feature_lookup,as_family=False,feature_type=None,default_value=None):
         if feature_lookup in self.features:
             out_feature = self.features.get(feature_lookup)
@@ -493,7 +509,7 @@ class GFF:
             # the code below allows retreival of data for an alternate feature type in the same family (e.g. CDS info for a gene) if there is only one
             if feature_type:
                 if not isinstance(out_feature.family, GFF_feature_heirarchy):
-                    raise TypeError(f'{out_feature.family}: Must be GFF_Feature_heirarchy object to convert between feature types, not {type(out_feature.family)}')
+                    raise TypeError(f'{out_feature.family}: Must be GFF_feature_heirarchy object to convert between feature types, not {type(out_feature.family)}')
                 if feature_type in out_feature.family.unique_features.keys(): # this only works for 1:1 relationships, e.g. one CDS per gene
                     out_feature = out_feature.family.unique_features.get(feature_type)
                 else:
@@ -578,6 +594,9 @@ class GFF:
         return '\n'.join(out_fasta)
 
     def add_feature_data(self,analysis_file,analysis_type='general',pad_missing=True,header_line_expected=True,only_extract_columns=False):
+        if not self.indexed:
+            self.index_features()
+            self.indexed = True
         input_delimiter = ',' if analysis_file.endswith('.csv') else '\t' # always assumes tab-delimited input unless explicit csv file
         analysis_types = { # a dictionary to match each analysis tool with the locus ID column and default keep columns
             'pangenome' : (None, [0], 1), # currently, only pangenome tables are tested and supported
@@ -1078,6 +1097,10 @@ if __name__ == "__main__":
 
     # conduct a single search if the search parameter was set - can then end script early
     if search_feature_info:
+        # index the features
+        if not gff_input.indexed:
+            gff_input.index_features()
+            gff_input.indexed = True
         # conduct the search
         found_features = gff_input.feature(search_feature_info)
         if not found_features:
@@ -1138,6 +1161,9 @@ if __name__ == "__main__":
     # elif out_format in ['subset', 'subset_table', 'subtab', 'features']:
     #     raise ValueError("out_format {} cannot be applied.".format(out_format))
     elif out_format in ['index','number','coords','ffn','fasta','stats','protein','faa','bed','tab','table','subset','subset_table','subtab','features']:
+        if out_format == 'bed' and not gff_input.indexed:
+            gff_input.index_features()
+            gff_input.indexed = True
         with open(out_file,'w') as outfile:
             for feature in gff_input.features.values():
                 if feature.contig.name in filtered_contig_list or feature.contig.number in filtered_contig_list:
